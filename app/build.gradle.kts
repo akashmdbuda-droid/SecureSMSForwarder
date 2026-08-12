@@ -16,10 +16,24 @@ android {
         applicationId = "com.example.securesmsforwarder"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.0.5"
-
+        versionCode = 7
+        versionName = "1.0.6"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        val storePasswordEnv = System.getenv("SIGNING_STORE_PASSWORD")
+        val keyAliasEnv = System.getenv("SIGNING_KEY_ALIAS")
+        val keyPasswordEnv = System.getenv("SIGNING_KEY_PASSWORD")
+
+        if (storePasswordEnv != null && keyAliasEnv != null && keyPasswordEnv != null) {
+            create("release") {
+                storeFile = file("release.keystore")
+                storePassword = storePasswordEnv
+                keyAlias = keyAliasEnv
+                keyPassword = keyPasswordEnv
+            }
+        }
     }
 
     buildTypes {
@@ -29,6 +43,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            if (System.getenv("SIGNING_STORE_PASSWORD") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
     compileOptions {
