@@ -55,6 +55,8 @@ class MainActivity : FragmentActivity() {
                 var deviceName by remember { mutableStateOf("") }
                 var lastSyncedTimestamp by remember { mutableStateOf(0L) }
                 val biometricHelper = remember { com.example.securesmsforwarder.core.util.BiometricHelper }
+                val appUpdater = remember { com.example.securesmsforwarder.updater.AppUpdater(this@MainActivity) }
+                var showUpdateDialog by remember { mutableStateOf<com.example.securesmsforwarder.updater.UpdateInfo?>(null) }
                 
                 androidx.compose.runtime.LaunchedEffect(Unit) {
                     fingerprint = keyManager.getHumanFriendlyFingerprint()
@@ -62,6 +64,36 @@ class MainActivity : FragmentActivity() {
                     trustedDevicesCount = if (trustStore.getTrustedDeviceId() != null) 1 else 0
                     deviceName = trustStore.getTrustedDeviceName()
                     lastSyncedTimestamp = trustStore.getLastSyncedTimestamp()
+                    
+                    launch(Dispatchers.IO) {
+                        val updateInfo = appUpdater.checkForUpdates()
+                        if (updateInfo.isUpdateAvailable) {
+                            showUpdateDialog = updateInfo
+                        }
+                    }
+                }
+
+                showUpdateDialog?.let { updateInfo ->
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { showUpdateDialog = null },
+                        title = { androidx.compose.material3.Text("Update Available") },
+                        text = { androidx.compose.material3.Text("Version ${updateInfo.latestVersionName} is available. Would you like to download and install it?") },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                updateInfo.downloadUrl?.let { url ->
+                                    appUpdater.downloadAndInstallUpdate(url)
+                                }
+                                showUpdateDialog = null
+                            }) {
+                                androidx.compose.material3.Text("Update")
+                            }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = { showUpdateDialog = null }) {
+                                androidx.compose.material3.Text("Later")
+                            }
+                        }
+                    )
                 }
 
                 val onRemoveTrustClick: () -> Unit = {
