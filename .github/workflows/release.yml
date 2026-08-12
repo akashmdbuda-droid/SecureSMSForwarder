@@ -28,7 +28,15 @@ jobs:
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
         run: |
-          echo "$KEYSTORE_B64" | grep -v "CERTIFICATE" | base64 -di > app/release.keystore
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "ERROR: KEYSTORE_B64 secret is empty or missing!"
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | grep -v "CERTIFICATE" | tr -d '\r\n' | base64 -di > app/release.keystore
+          if [ ! -s app/release.keystore ]; then
+            echo "ERROR: Decoded keystore is empty! The base64 string might be invalid."
+            exit 1
+          fi
 
       - name: Build Release APK
         env:
