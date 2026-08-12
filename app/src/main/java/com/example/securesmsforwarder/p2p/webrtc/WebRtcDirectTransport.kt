@@ -63,10 +63,17 @@ class WebRtcDirectTransport(private val context: Context) {
         dataChannel?.close()
         peerConnection?.close()
         
-        // We strictly only allow STUN, never TURN, to comply with the serverless requirement.
+        // Use STUN for direct P2P discovery, and TURN as a fallback for strict NATs/firewalls
         val stunServer = IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
         
-        val rtcConfig = PeerConnection.RTCConfiguration(listOf(stunServer)).apply {
+        // Metered.ca OpenRelay (Free Public TURN for testing)
+        // TODO: Replace with your own Metered credentials for production
+        val turnServer = IceServer.builder("turn:openrelay.metered.ca:80")
+            .setUsername("openrelayproject")
+            .setPassword("openrelayproject")
+            .createIceServer()
+        
+        val rtcConfig = PeerConnection.RTCConfiguration(listOf(stunServer, turnServer)).apply {
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
         }
 
