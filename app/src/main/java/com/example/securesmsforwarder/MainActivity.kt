@@ -28,6 +28,9 @@ import androidx.fragment.app.FragmentActivity
 class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        android.widget.Toast.makeText(this, "Running Auto-Updater Test: v1.0.1", android.widget.Toast.LENGTH_LONG).show()
+
         enableEdgeToEdge()
         val roleManager = RoleManager(this)
         val keyManager = KeyManager(this)
