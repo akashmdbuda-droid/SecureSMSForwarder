@@ -88,14 +88,20 @@ class AppUpdater(private val context: Context) {
         return false
     }
 
-    fun downloadAndInstallUpdate(downloadUrl: String, fileName: String = "SecureSMSForwarder_update.apk") {
-        val request = DownloadManager.Request(Uri.parse(downloadUrl))
+    fun downloadAndInstall(apkUrl: String) {
+        val destinationFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "update.apk")
+        if (destinationFile.exists()) {
+            destinationFile.delete()
+        }
+
+        android.widget.Toast.makeText(context, "Downloading update in background... Please wait.", android.widget.Toast.LENGTH_LONG).show()
+
+        val request = DownloadManager.Request(Uri.parse(apkUrl))
             .setTitle("Downloading Update")
-            .setDescription("Downloading latest version of SecureSMSForwarder")
+            .setDescription("Downloading Secure SMS Forwarder update")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
-            .setAllowedOverMetered(true)
-            .setAllowedOverRoaming(true)
+            .setDestinationUri(Uri.fromFile(destinationFile))
+            .setMimeType("application/vnd.android.package-archive")
 
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val downloadId = downloadManager.enqueue(request)
@@ -104,7 +110,7 @@ class AppUpdater(private val context: Context) {
             override fun onReceive(context: Context, intent: Intent) {
                 val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
                 if (downloadId == id) {
-                    installApk(fileName)
+                    installApk()
                     context.unregisterReceiver(this)
                 }
             }
@@ -117,8 +123,8 @@ class AppUpdater(private val context: Context) {
         }
     }
 
-    private fun installApk(fileName: String) {
-        val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName)
+    private fun installApk() {
+        val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "update.apk")
         if (!file.exists()) {
             Log.e(TAG, "APK file not found: ${file.absolutePath}")
             return
