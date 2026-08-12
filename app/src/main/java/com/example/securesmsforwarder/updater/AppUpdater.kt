@@ -100,7 +100,7 @@ class AppUpdater(private val context: Context) {
             .setTitle("Downloading Update")
             .setDescription("Downloading Secure SMS Forwarder update")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-            .setDestinationUri(Uri.fromFile(destinationFile))
+            .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, "update.apk")
             .setMimeType("application/vnd.android.package-archive")
             .setAllowedOverMetered(true)
             .setAllowedOverRoaming(true)
