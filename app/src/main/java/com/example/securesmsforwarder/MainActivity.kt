@@ -29,7 +29,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        android.widget.Toast.makeText(this, "✅ V1.0.13 INSTALLED! AUTO-UPDATER IS PERFECT!", android.widget.Toast.LENGTH_LONG).show()
+        android.widget.Toast.makeText(this, "🎉 GLORIOUS SUCCESS! Welcome to v1.0.15!", android.widget.Toast.LENGTH_LONG).show()
 
         enableEdgeToEdge()
         val roleManager = RoleManager(this)
