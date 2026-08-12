@@ -102,9 +102,20 @@ class AppUpdater(private val context: Context) {
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
             .setDestinationUri(Uri.fromFile(destinationFile))
             .setMimeType("application/vnd.android.package-archive")
+            .setAllowedOverMetered(true)
+            .setAllowedOverRoaming(true)
 
         val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
         val downloadId = downloadManager.enqueue(request)
+
+        try {
+            // Open the system downloads screen so the user can see the progress bar
+            val downloadsIntent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS)
+            downloadsIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            context.startActivity(downloadsIntent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not open downloads screen", e)
+        }
 
         val onComplete = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
