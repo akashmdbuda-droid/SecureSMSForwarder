@@ -27,12 +27,12 @@ class AppUpdater(private val context: Context) {
 
     companion object {
         private const val TAG = "AppUpdater"
-        private const val UPDATE_URL = "https://smsforwarder-7eb77.web.app/version.json"
+        private const val GITHUB_API_URL = "https://api.github.com/repos/akashmdbuda-droid/SecureSMSForwarder/releases/latest"
     }
 
     suspend fun checkForUpdates(): UpdateInfo = withContext(Dispatchers.IO) {
         try {
-            val url = URL(UPDATE_URL)
+            val url = URL(GITHUB_API_URL)
             val connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
             connection.setRequestProperty("Accept", "application/vnd.github.v3+json")
@@ -41,14 +41,24 @@ class AppUpdater(private val context: Context) {
                 val response = connection.inputStream.bufferedReader().use { it.readText() }
                 val json = JSONObject(response)
 
-                val latestVersion = json.getString("latestVersionName")
-                val downloadUrl = json.getString("downloadUrl")
+                val tagName = json.getString("tag_name").removePrefix("v") // assuming tags are like "v1.0.1"
                 val currentVersion = BuildConfig.VERSION_NAME
 
-                if (isNewerVersion(currentVersion, latestVersion)) {
+                if (isNewerVersion(currentVersion, tagName)) {
+                    val assets = json.getJSONArray("assets")
+                    var downloadUrl: String? = null
+                    for (i in 0 until assets.length()) {
+                        val asset = assets.getJSONObject(i)
+                        val name = asset.getString("name")
+                        if (name.endsWith(".apk")) {
+                            downloadUrl = asset.getString("browser_download_url")
+                            break
+                        }
+                    }
+
                     return@withContext UpdateInfo(
-                        isUpdateAvailable = true,
-                        latestVersionName = latestVersion,
+                        isUpdateAvailable = downloadUrl != null,
+                        latestVersionName = tagName,
                         downloadUrl = downloadUrl
                     )
                 }

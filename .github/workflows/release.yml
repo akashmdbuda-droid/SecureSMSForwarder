@@ -6,11 +6,10 @@ on:
       - 'v*'
 
 jobs:
-  build_and_deploy:
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      checks: write
 
     steps:
       - name: Checkout repository
@@ -28,17 +27,9 @@ jobs:
       - name: Build Debug APK
         run: ./gradlew assembleDebug
 
-      - name: Prepare Public Directory
-        run: |
-          mkdir public
-          cp app/build/outputs/apk/debug/app-debug.apk public/SecureSMSForwarder.apk
-          VERSION_NAME=$(echo ${{ github.ref_name }} | sed 's/^v//')
-          echo "{\"latestVersionName\":\"$VERSION_NAME\",\"downloadUrl\":\"https://smsforwarder-7eb77.web.app/SecureSMSForwarder.apk\"}" > public/version.json
-
-      - name: Deploy to Firebase Hosting
-        uses: FirebaseExtended/action-hosting-deploy@v0
+      - name: Create GitHub Release and Upload APK
+        uses: softprops/action-gh-release@v2
         with:
-          repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_SMSFORWARDER_7EB77 }}
-          channelId: live
-          projectId: smsforwarder-7eb77
+          files: app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
