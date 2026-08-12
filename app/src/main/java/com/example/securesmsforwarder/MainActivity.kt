@@ -84,7 +84,7 @@ class MainActivity : FragmentActivity() {
                         confirmButton = {
                             androidx.compose.material3.TextButton(onClick = {
                                 updateInfo.downloadUrl?.let { url ->
-                                    appUpdater.downloadAndInstallUpdate(url)
+                                    appUpdater.downloadAndInstall(url)
                                 }
                                 showUpdateDialog = null
                             }) {
