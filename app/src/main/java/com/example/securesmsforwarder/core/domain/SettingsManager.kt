@@ -39,4 +39,10 @@ class SettingsManager(context: Context) {
         set(value) {
             prefs.edit().putBoolean("connection_paused", value).apply()
         }
+
+    var lastSeenVersionCode: Int
+        get() = prefs.getInt("last_seen_version_code", -1)
+        set(value) {
+            prefs.edit().putInt("last_seen_version_code", value).apply()
+        }
 }

@@ -60,8 +60,13 @@ class MainActivity : FragmentActivity() {
                 val biometricHelper = remember { com.example.securesmsforwarder.core.util.BiometricHelper }
                 val appUpdater = remember { com.example.securesmsforwarder.updater.AppUpdater(this@MainActivity) }
                 var showUpdateDialog by remember { mutableStateOf<com.example.securesmsforwarder.updater.UpdateInfo?>(null) }
+                var showChangelog by remember { mutableStateOf(false) }
                 
                 androidx.compose.runtime.LaunchedEffect(Unit) {
+                    if (settingsManager.lastSeenVersionCode < com.example.securesmsforwarder.BuildConfig.VERSION_CODE) {
+                        showChangelog = true
+                        settingsManager.lastSeenVersionCode = com.example.securesmsforwarder.BuildConfig.VERSION_CODE
+                    }
                     fingerprint = keyManager.getHumanFriendlyFingerprint()
                     val trustStore = com.example.securesmsforwarder.pairing.TrustStore(this@MainActivity)
                     trustedDevicesCount = if (trustStore.getTrustedDeviceId() != null) 1 else 0
@@ -96,6 +101,12 @@ class MainActivity : FragmentActivity() {
                                 androidx.compose.material3.Text("Later")
                             }
                         }
+                    )
+                }
+
+                if (showChangelog) {
+                    com.example.securesmsforwarder.ui.changelog.ChangelogDialog(
+                        onDismiss = { showChangelog = false }
                     )
                 }
 
