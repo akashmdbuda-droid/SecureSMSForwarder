@@ -17,6 +17,13 @@ data class ReleaseNote(
 
 val Changelog = listOf(
     ReleaseNote(
+        version = "v1.0.18",
+        date = "2026-08-14",
+        changes = listOf(
+            "Added an in-app Changelog section to show what's new in each release"
+        )
+    ),
+    ReleaseNote(
         version = "v1.0.17",
         date = "2026-08-14",
         changes = listOf(
