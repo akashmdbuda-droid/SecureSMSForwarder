@@ -27,6 +27,7 @@ class WebRtcDirectTransport(private val context: Context) {
     private var peerConnectionFactory: PeerConnectionFactory? = null
     private var peerConnection: PeerConnection? = null
     private var dataChannel: DataChannel? = null
+    private var useTrickleIce: Boolean = false
 
     // Flows for signaling
     private val _localSdpFlow = MutableSharedFlow<SessionDescription>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -58,8 +59,12 @@ class WebRtcDirectTransport(private val context: Context) {
             .createPeerConnectionFactory()
     }
 
-    fun startConnection(isInitiator: Boolean) {
-        Log.d(TAG, "startConnection called. isInitiator=$isInitiator")
+    fun startConnection(isInitiator: Boolean, useTrickleIce: Boolean = false) {
+        this.useTrickleIce = useTrickleIce
+        Log.d(TAG, "startConnection called. isInitiator=$isInitiator, useTrickleIce=$useTrickleIce")
+        
+        _connectionStateFlow.tryEmit(PeerConnection.PeerConnectionState.CONNECTING)
+        
         dataChannel?.close()
         peerConnection?.close()
         
@@ -89,11 +94,16 @@ class WebRtcDirectTransport(private val context: Context) {
 
             peerConnection?.createOffer(createSdpObserver { sdp ->
                 peerConnection?.setLocalDescription(createSdpObserver(), sdp)
-                // Timeout fallback for ICE gathering
-                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                    kotlinx.coroutines.delay(3000)
-                    if (peerConnection?.iceGatheringState() != PeerConnection.IceGatheringState.COMPLETE) {
-                        peerConnection?.localDescription?.let { finalSdp -> _localSdpFlow.tryEmit(finalSdp) }
+                
+                if (useTrickleIce) {
+                    _localSdpFlow.tryEmit(sdp)
+                } else {
+                    // Timeout fallback for ICE gathering
+                    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                        kotlinx.coroutines.delay(3000)
+                        if (peerConnection?.iceGatheringState() != PeerConnection.IceGatheringState.COMPLETE) {
+                            peerConnection?.localDescription?.let { finalSdp -> _localSdpFlow.tryEmit(finalSdp) }
+                        }
                     }
                 }
             }, MediaConstraints())
@@ -107,11 +117,15 @@ class WebRtcDirectTransport(private val context: Context) {
                 if (sdp.type == SessionDescription.Type.OFFER) {
                     peerConnection?.createAnswer(createSdpObserver { answer ->
                         peerConnection?.setLocalDescription(createSdpObserver(), answer)
-                        // Timeout fallback for ICE gathering
-                        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                            kotlinx.coroutines.delay(3000)
-                            if (peerConnection?.iceGatheringState() != PeerConnection.IceGatheringState.COMPLETE) {
-                                peerConnection?.localDescription?.let { finalSdp -> _localSdpFlow.tryEmit(finalSdp) }
+                        if (useTrickleIce) {
+                            _localSdpFlow.tryEmit(answer)
+                        } else {
+                            // Timeout fallback for ICE gathering
+                            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                                kotlinx.coroutines.delay(3000)
+                                if (peerConnection?.iceGatheringState() != PeerConnection.IceGatheringState.COMPLETE) {
+                                    peerConnection?.localDescription?.let { finalSdp -> _localSdpFlow.tryEmit(finalSdp) }
+                                }
                             }
                         }
                     }, MediaConstraints())
@@ -121,7 +135,7 @@ class WebRtcDirectTransport(private val context: Context) {
             override fun onSetFailure(error: String?) { 
                 Log.e(TAG, "SDP Set Failure: $error. Restarting connection.")
                 if (!isRetry) {
-                    startConnection(isInitiator = false)
+                    startConnection(isInitiator = false, useTrickleIce = useTrickleIce)
                     setRemoteDescription(sdp, isRetry = true)
                 }
             }
@@ -143,7 +157,7 @@ class WebRtcDirectTransport(private val context: Context) {
             override fun onSetFailure(error: String?) {
                 Log.e(TAG, "Failed to set remote answer: $error. Restarting connection to generate new offer!")
                 // Since we only receive answers when we are the initiator, it's safe to assume true here.
-                startConnection(isInitiator = true)
+                startConnection(isInitiator = true, useTrickleIce = useTrickleIce)
             }
         }, sdp)
     }

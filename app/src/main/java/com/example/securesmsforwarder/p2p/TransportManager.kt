@@ -62,7 +62,7 @@ class TransportManager(
                         reconnectJob = launch {
                             delay(5000)
                             Log.d("TransportManager", "Executing auto-reconnect...")
-                            webRtcTransport.startConnection(isInitiator)
+                            webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
                         }
                     }
                 } else if (state == PeerConnection.PeerConnectionState.NEW || state == PeerConnection.PeerConnectionState.CONNECTING) {
@@ -71,7 +71,7 @@ class TransportManager(
                         connectionTimeoutJob = launch {
                             delay(15000) // 15s timeout
                             Log.w("TransportManager", "Connection stuck in $state. Forcing restart.")
-                            webRtcTransport.startConnection(isInitiator)
+                            webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
                         }
                     }
                 }
@@ -83,6 +83,20 @@ class TransportManager(
             webRtcTransport.localSdpFlow.collectLatest { sdp ->
                 signalingProvider.onLocalSdpReady(sdp)
             }
+        }
+
+        // Observe local ICE candidates
+        scope.launch {
+            webRtcTransport.localIceCandidatesFlow.collect { candidate ->
+                if (signalingProvider.supportsTrickleIce()) {
+                    signalingProvider.onLocalIceCandidateReady(candidate)
+                }
+            }
+        }
+
+        // Wire up remote ICE candidates
+        signalingProvider.setRemoteIceCandidateListener { candidate ->
+            webRtcTransport.addRemoteIceCandidate(candidate)
         }
 
         // Wire up Signaling Provider to WebRTC Transport
@@ -101,7 +115,7 @@ class TransportManager(
                 Log.d("TransportManager", "Received connection request (wakeup) from remote peer. Restarting connection...")
                 reconnectJob?.cancel()
                 connectionTimeoutJob?.cancel()
-                webRtcTransport.startConnection(isInitiator)
+                webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
             }
         }
 
@@ -295,7 +309,7 @@ class TransportManager(
             webRtcTransport.suspendConnection()
         } else {
             Log.d("TransportManager", "Connection resumed manually. Attempting start.")
-            webRtcTransport.startConnection(isInitiator)
+            webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
         }
     }
 
@@ -303,7 +317,7 @@ class TransportManager(
         Log.d("TransportManager", "Manual connection request initiated.")
         reconnectJob?.cancel()
         connectionTimeoutJob?.cancel()
-        webRtcTransport.startConnection(isInitiator)
+        webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
         signalingProvider.requestConnection()
     }
 

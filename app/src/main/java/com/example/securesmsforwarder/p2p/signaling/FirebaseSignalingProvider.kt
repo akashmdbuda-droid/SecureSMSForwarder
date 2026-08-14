@@ -30,6 +30,11 @@ class FirebaseSignalingProvider(
         val envelope = SignalingEnvelope.fromSessionDescription(sdp, localDeviceId)
         val base64 = envelope.toBase64String()
 
+        // Clear stale ICE candidates when starting a new session
+        if (sdp.type == SessionDescription.Type.OFFER || sdp.type == SessionDescription.Type.ANSWER) {
+            database.getReference("signaling/$localDeviceId/candidates").removeValue()
+        }
+
         val type = if (sdp.type == SessionDescription.Type.OFFER) "offer" else "answer"
         val ref = database.getReference("signaling/$localDeviceId/$type")
         ref.setValue(base64).addOnSuccessListener {
@@ -54,6 +59,44 @@ class FirebaseSignalingProvider(
 
     override fun setConnectionRequestListener(listener: () -> Unit) {
         connectionRequestListener = listener
+    }
+
+    override fun supportsTrickleIce(): Boolean = true
+
+    override fun onLocalIceCandidateReady(candidate: org.webrtc.IceCandidate) {
+        val candidateMap = mapOf(
+            "sdpMid" to candidate.sdpMid,
+            "sdpMLineIndex" to candidate.sdpMLineIndex,
+            "sdp" to candidate.sdp
+        )
+        val ref = database.getReference("signaling/$localDeviceId/candidates").push()
+        ref.setValue(candidateMap).addOnFailureListener {
+            Log.e("FirebaseSignaling", "Failed to push ICE candidate", it)
+        }
+    }
+
+    override fun setRemoteIceCandidateListener(listener: (org.webrtc.IceCandidate) -> Unit) {
+        val ref = database.getReference("signaling/$remoteDeviceId/candidates")
+        ref.addChildEventListener(object : com.google.firebase.database.ChildEventListener {
+            override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
+                try {
+                    val sdpMid = snapshot.child("sdpMid").getValue(String::class.java) ?: return
+                    val sdpMLineIndex = snapshot.child("sdpMLineIndex").getValue(Int::class.java) ?: return
+                    val sdp = snapshot.child("sdp").getValue(String::class.java) ?: return
+                    val candidate = org.webrtc.IceCandidate(sdpMid, sdpMLineIndex, sdp)
+                    listener.invoke(candidate)
+                    snapshot.ref.removeValue() // Consume it immediately
+                } catch (e: Exception) {
+                    Log.e("FirebaseSignaling", "Failed to parse remote ICE candidate", e)
+                }
+            }
+            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onChildRemoved(snapshot: DataSnapshot) {}
+            override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("FirebaseSignaling", "Firebase ICE candidates listen cancelled", error.toException())
+            }
+        })
     }
 
     private fun listenForRemoteSdp() {
