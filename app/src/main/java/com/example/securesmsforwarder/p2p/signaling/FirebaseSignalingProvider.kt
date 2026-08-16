@@ -18,16 +18,31 @@ class FirebaseSignalingProvider(
     private var remoteSdpListener: ((SessionDescription) -> Unit)? = null
     private var connectionRequestListener: (() -> Unit)? = null
 
-    // Sender writes to "signaling/$localDeviceId/offer"
-    // Viewer reads from "signaling/$remoteDeviceId/offer" and writes to "signaling/$localDeviceId/answer"
-
     init {
+        listenForFirebaseConnection()
         listenForRemoteSdp()
         listenForConnectionRequests()
     }
 
+    private fun listenForFirebaseConnection() {
+        val connectedRef = database.getReference(".info/connected")
+        connectedRef.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val connected = snapshot.getValue(Boolean::class.java) ?: false
+                Log.d("FirebaseSignaling", "Firebase Realtime DB connection status: $connected")
+            }
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("FirebaseSignaling", "Firebase .info/connected cancelled", error.toException())
+            }
+        })
+    }
+
     override fun onLocalSdpReady(sdp: SessionDescription) {
-        val envelope = SignalingEnvelope.fromSessionDescription(sdp, localDeviceId)
+        val envelope = SignalingEnvelope.fromSessionDescription(
+            sdp = sdp,
+            deviceId = localDeviceId,
+            ttlMillis = 45 * 1000L // 45 seconds TTL for signaling freshness
+        )
         val base64 = envelope.toBase64String()
 
         // Clear stale ICE candidates when starting a new session
@@ -38,7 +53,7 @@ class FirebaseSignalingProvider(
         val type = if (sdp.type == SessionDescription.Type.OFFER) "offer" else "answer"
         val ref = database.getReference("signaling/$localDeviceId/$type")
         ref.setValue(base64).addOnSuccessListener {
-            Log.d("FirebaseSignaling", "Local $type SDP pushed to Firebase")
+            Log.d("FirebaseSignaling", "Local $type SDP pushed to Firebase (sessionId: ${envelope.sessionId})")
         }.addOnFailureListener {
             Log.e("FirebaseSignaling", "Failed to push local SDP to Firebase", it)
         }
@@ -50,8 +65,9 @@ class FirebaseSignalingProvider(
 
     override fun requestConnection() {
         val ref = database.getReference("signaling/$remoteDeviceId/wakeup")
-        ref.setValue(System.currentTimeMillis()).addOnSuccessListener {
-            Log.d("FirebaseSignaling", "Sent wakeup ping to remote peer")
+        val timestamp = System.currentTimeMillis()
+        ref.setValue(timestamp).addOnSuccessListener {
+            Log.d("FirebaseSignaling", "Sent wakeup ping ($timestamp) to remote peer $remoteDeviceId")
         }.addOnFailureListener {
             Log.e("FirebaseSignaling", "Failed to send wakeup ping", it)
         }
@@ -67,7 +83,8 @@ class FirebaseSignalingProvider(
         val candidateMap = mapOf(
             "sdpMid" to candidate.sdpMid,
             "sdpMLineIndex" to candidate.sdpMLineIndex,
-            "sdp" to candidate.sdp
+            "sdp" to candidate.sdp,
+            "timestamp" to System.currentTimeMillis()
         )
         val ref = database.getReference("signaling/$localDeviceId/candidates").push()
         ref.setValue(candidateMap).addOnFailureListener {
@@ -109,14 +126,23 @@ class FirebaseSignalingProvider(
                 if (base64 != null) {
                     try {
                         val envelope = SignalingEnvelope.parseFromBase64String(base64)
+                        val now = System.currentTimeMillis()
+                        
+                        // Enforce freshness (reject offers/answers older than 45 seconds)
+                        if (now - envelope.createdAt > 45000L || envelope.expiresAt < now) {
+                            Log.w("FirebaseSignaling", "Discarding stale $expectedType SDP (age: ${now - envelope.createdAt}ms)")
+                            ref.removeValue()
+                            return
+                        }
+
                         if (envelope.deviceId == remoteDeviceId) {
-                            Log.d("FirebaseSignaling", "Received remote $expectedType from Firebase")
+                            Log.d("FirebaseSignaling", "Received fresh remote $expectedType from Firebase (age: ${now - envelope.createdAt}ms)")
                             remoteSdpListener?.invoke(envelope.toSessionDescription())
                             
-                            // Once processed, we can clear it to avoid reprocessing on reconnect
+                            // Once processed, clear it to avoid reprocessing on reconnect
                             ref.removeValue() 
                         } else {
-                            Log.e("FirebaseSignaling", "Device ID mismatch in received SDP")
+                            Log.e("FirebaseSignaling", "Device ID mismatch in received SDP: expected $remoteDeviceId, got ${envelope.deviceId}")
                         }
                     } catch (e: Exception) {
                         Log.e("FirebaseSignaling", "Failed to parse remote SDP from Firebase", e)
@@ -135,11 +161,16 @@ class FirebaseSignalingProvider(
         ref.addValueEventListener(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
                 if (snapshot.exists()) {
-                    Log.d("FirebaseSignaling", "Received connection request ping from remote peer")
-                    connectionRequestListener?.invoke()
+                    val pingTime = snapshot.getValue(Long::class.java) ?: 0L
+                    ref.removeValue() // Consume the ping
                     
-                    // Consume the ping
-                    ref.removeValue()
+                    val now = System.currentTimeMillis()
+                    if (pingTime == 0L || (now - pingTime) < 60000L) {
+                        Log.d("FirebaseSignaling", "Received valid connection request (wakeup) from remote peer (age: ${if (pingTime > 0) now - pingTime else 0}ms)")
+                        connectionRequestListener?.invoke()
+                    } else {
+                        Log.w("FirebaseSignaling", "Discarding stale wakeup ping (age: ${now - pingTime}ms)")
+                    }
                 }
             }
 

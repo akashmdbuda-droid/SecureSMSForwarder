@@ -16,8 +16,9 @@ class MessageQueueManagerTest {
     class FakeMessageDao : MessageDao {
         val messages = mutableMapOf<String, MessageEntity>()
 
-        override suspend fun insertMessage(message: MessageEntity) {
+        override suspend fun insertMessage(message: MessageEntity): Long {
             messages[message.messageId] = message
+            return 1L
         }
 
         override suspend fun updateMessage(message: MessageEntity) {
@@ -32,6 +33,10 @@ class MessageQueueManagerTest {
             return flowOf(messages.values.toList())
         }
 
+        override suspend fun getUnreadMessages(): List<MessageEntity> {
+            return messages.values.filter { !it.isRead }
+        }
+
         override fun getPendingMessages(): Flow<List<MessageEntity>> {
             return flowOf(messages.values.filter { it.state != MessageState.DELIVERED })
         }
@@ -43,12 +48,23 @@ class MessageQueueManagerTest {
             }
         }
 
+        override suspend fun markAsRead(id: String) {
+            val msg = messages[id]
+            if (msg != null) {
+                messages[id] = msg.copy(isRead = true)
+            }
+        }
+
         override suspend fun deleteMessage(id: String) {
             messages.remove(id)
         }
 
         override suspend fun deleteAll() {
             messages.clear()
+        }
+
+        override suspend fun getRecentMessagesFromSender(sender: String, minTime: Long, maxTime: Long): List<MessageEntity> {
+            return messages.values.filter { it.senderDeviceId == sender && it.timestamp in minTime..maxTime }
         }
     }
 

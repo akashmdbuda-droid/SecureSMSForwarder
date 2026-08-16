@@ -17,6 +17,17 @@ data class ReleaseNote(
 
 val Changelog = listOf(
     ReleaseNote(
+        version = "v1.0.19",
+        date = "2026-08-16",
+        changes = listOf(
+            "Bulletproof reconnection after flight mode and network drops",
+            "Automatic reconnect when internet is restored without manual button presses",
+            "Added remote ICE candidate buffering to prevent lost TURN relay candidates",
+            "Multi-port STUN and TCP TURN fallback for strict carrier CGNAT traversal (Hungary <-> India)",
+            "Bidirectional connection wakeup handling and signaling freshness validation"
+        )
+    ),
+    ReleaseNote(
         version = "v1.0.18",
         date = "2026-08-14",
         changes = listOf(
@@ -76,7 +87,7 @@ fun ChangelogDialog(
                             )
                         }
                     }
-                    Divider(modifier = Modifier.padding(vertical = 4.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                 }
             }
         },

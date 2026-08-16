@@ -6,24 +6,37 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.IBinder
 import android.app.PendingIntent
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.securesmsforwarder.core.domain.MessageQueueManager
+import com.example.securesmsforwarder.core.domain.SettingsManager
 import com.example.securesmsforwarder.crypto.encryption.MessageEncryption
 import com.example.securesmsforwarder.crypto.identity.KeyManager
 import com.example.securesmsforwarder.p2p.TransportManager
 import com.example.securesmsforwarder.p2p.webrtc.WebRtcDirectTransport
 import com.example.securesmsforwarder.pairing.TrustStore
 import com.example.securesmsforwarder.storage.AppDatabase
+import com.google.firebase.database.FirebaseDatabase
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class ForwardingService : Service() {
 
     private var transportManager: TransportManager? = null
     private var webRtcTransport: WebRtcDirectTransport? = null
+    private var connectivityManager: ConnectivityManager? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     companion object {
+        private const val TAG = "ForwardingService"
         private const val CHANNEL_ID = "ForwardingServiceChannel"
         private const val MESSAGE_CHANNEL_ID = "IncomingMessagesChannel"
         private const val NOTIFICATION_ID = 1
@@ -46,13 +59,14 @@ class ForwardingService : Service() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Secure SMS Forwarder")
             .setContentText("Forwarding service is active to provide real-time connection.")
-            .setSmallIcon(android.R.drawable.ic_secure) // Replace with app icon later
+            .setSmallIcon(android.R.drawable.ic_secure)
             .setOngoing(true)
             .build()
 
         startForeground(NOTIFICATION_ID, notification)
 
         initializeTransport()
+        registerNetworkCallback()
     }
 
     private var smsObserver: com.example.securesmsforwarder.sms.SmsObserver? = null
@@ -97,15 +111,15 @@ class ForwardingService : Service() {
         activeSignalingProvider = signaling as? com.example.securesmsforwarder.p2p.signaling.ManualSignalingProvider
         
         val stateFlow = kotlinx.coroutines.flow.MutableStateFlow("DISCONNECTED")
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             webRtcTransport?.connectionStateFlow?.collect { state ->
                 stateFlow.value = state.name
             }
         }
         connectionStateFlow = stateFlow
         
-        val settingsManager = com.example.securesmsforwarder.core.domain.SettingsManager(this)
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        val settingsManager = SettingsManager(this)
+        CoroutineScope(Dispatchers.IO).launch {
             settingsManager.connectionPausedFlow.collect { isPaused ->
                 transportManager?.setConnectionPaused(isPaused)
             }
@@ -118,11 +132,60 @@ class ForwardingService : Service() {
 
         if (!settingsManager.isConnectionPaused) {
             if (roleManager.currentRole == com.example.securesmsforwarder.core.domain.DeviceRole.SENDER) {
-                webRtcTransport?.startConnection(isInitiator = true)
+                webRtcTransport?.startConnection(isInitiator = true, useTrickleIce = signaling.supportsTrickleIce())
             } else if (roleManager.currentRole == com.example.securesmsforwarder.core.domain.DeviceRole.VIEWER) {
-                webRtcTransport?.startConnection(isInitiator = false)
+                webRtcTransport?.startConnection(isInitiator = false, useTrickleIce = signaling.supportsTrickleIce())
+                signaling.requestConnection()
             }
         }
+    }
+
+    private fun registerNetworkCallback() {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
+        connectivityManager = cm
+        
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+            
+        networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                Log.d(TAG, "Internet connection restored (onAvailable). Resuming Firebase & Auto-Connecting...")
+                FirebaseDatabase.getInstance().goOnline()
+                
+                val settingsManager = SettingsManager(this@ForwardingService)
+                val trustStore = TrustStore(this@ForwardingService)
+                if (!settingsManager.isConnectionPaused && trustStore.getTrustedDeviceId() != null) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        delay(1200) // Brief delay to ensure stable network interface
+                        Log.d(TAG, "Triggering automatic post-network-recovery connection...")
+                        transportManager?.requestConnection()
+                    }
+                }
+            }
+
+            override fun onLost(network: Network) {
+                Log.d(TAG, "Internet connection lost (onLost).")
+                FirebaseDatabase.getInstance().goOffline()
+            }
+        }
+        
+        try {
+            cm.registerNetworkCallback(request, networkCallback!!)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register NetworkCallback", e)
+        }
+    }
+
+    private fun unregisterNetworkCallback() {
+        networkCallback?.let {
+            try {
+                connectivityManager?.unregisterNetworkCallback(it)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to unregister NetworkCallback", e)
+            }
+        }
+        networkCallback = null
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -137,6 +200,7 @@ class ForwardingService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        unregisterNetworkCallback()
         smsObserver?.stop()
         webRtcTransport?.close()
         transportManager?.close()
@@ -185,7 +249,7 @@ class ForwardingService : Service() {
     }
     
     private fun showIncomingMessageNotification(sender: String, body: String) {
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.IO).launch {
             val unreadMessages = AppDatabase.getDatabase(this@ForwardingService).messageDao().getUnreadMessages()
             
             val intent = Intent(this@ForwardingService, com.example.securesmsforwarder.MainActivity::class.java).apply {
@@ -195,7 +259,6 @@ class ForwardingService : Service() {
 
             val inboxStyle = NotificationCompat.InboxStyle()
             
-            // Limit to max 7 lines in the inbox style to avoid huge notifications
             unreadMessages.take(7).reversed().forEach { msg ->
                 val text = String(msg.encryptedPayload ?: ByteArray(0), Charsets.UTF_8)
                 inboxStyle.addLine("${msg.senderDeviceId}: $text")
@@ -218,7 +281,7 @@ class ForwardingService : Service() {
                 .build()
 
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.notify(2, notification) // Use fixed ID to replace previous notification
+            manager.notify(2, notification)
         }
     }
 }
