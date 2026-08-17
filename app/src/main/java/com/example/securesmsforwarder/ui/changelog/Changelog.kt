@@ -17,6 +17,13 @@ data class ReleaseNote(
 
 val Changelog = listOf(
     ReleaseNote(
+        version = "v1.0.20",
+        date = "2026-08-17",
+        changes = listOf(
+            "Reverted connection engine to v1.0.18 for proven connection stability"
+        )
+    ),
+    ReleaseNote(
         version = "v1.0.19",
         date = "2026-08-16",
         changes = listOf(

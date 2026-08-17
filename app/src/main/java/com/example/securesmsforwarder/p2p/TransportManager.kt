@@ -40,7 +40,7 @@ class TransportManager(
         scope.launch {
             webRtcTransport.connectionStateFlow.collectLatest { state ->
                 isConnected = state == PeerConnection.PeerConnectionState.CONNECTED
-                Log.d("TransportManager", "WebRTC State changed: $state (isInitiator=$isInitiator)")
+                Log.d("TransportManager", "WebRTC State changed: $state")
                 
                 reconnectJob?.cancel()
                 if (isConnected) {
@@ -49,22 +49,20 @@ class TransportManager(
                     
                     // Auto-Exchange Keys
                     val serializedLocalKey = keyManager.getSerializedPublicKey()
-                    val keyMsg = "KEY:$serializedLocalKey".toByteArray(Charsets.UTF_8)
-                    webRtcTransport.sendMessage(keyMsg)
+                    if (serializedLocalKey != null) {
+                        val keyMsg = "KEY:$serializedLocalKey".toByteArray(Charsets.UTF_8)
+                        webRtcTransport.sendMessage(keyMsg)
+                    }
 
                     drainQueue()
                 } else if (state == PeerConnection.PeerConnectionState.FAILED || state == PeerConnection.PeerConnectionState.DISCONNECTED) {
                     connectionTimeoutJob?.cancel()
                     if (!isPaused) {
-                        Log.d("TransportManager", "Connection dropped ($state). Scheduling reconnect in 4s...")
+                        Log.d("TransportManager", "Connection dropped. Scheduling reconnect...")
                         reconnectJob = launch {
-                            delay(4000)
-                            Log.d("TransportManager", "Executing auto-reconnect (isInitiator=$isInitiator)...")
+                            delay(5000)
+                            Log.d("TransportManager", "Executing auto-reconnect...")
                             webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
-                            if (!isInitiator) {
-                                // Viewer notifies Sender so Sender creates a fresh Offer
-                                signalingProvider.requestConnection()
-                            }
                         }
                     }
                 } else if (state == PeerConnection.PeerConnectionState.NEW || state == PeerConnection.PeerConnectionState.CONNECTING) {
@@ -74,9 +72,6 @@ class TransportManager(
                             delay(15000) // 15s timeout
                             Log.w("TransportManager", "Connection stuck in $state. Forcing restart.")
                             webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
-                            if (!isInitiator) {
-                                signalingProvider.requestConnection()
-                            }
                         }
                     }
                 }
@@ -107,26 +102,20 @@ class TransportManager(
         // Wire up Signaling Provider to WebRTC Transport
         signalingProvider.setRemoteSdpListener { remoteSdp: SessionDescription ->
             if (remoteSdp.type == SessionDescription.Type.OFFER) {
-                Log.d("TransportManager", "Received remote offer, resetting reconnect timers")
+                Log.d("TransportManager", "Received remote offer, cancelling any pending reconnect job")
                 reconnectJob?.cancel()
-                connectionTimeoutJob?.cancel()
                 webRtcTransport.setRemoteDescription(remoteSdp)
             } else {
-                Log.d("TransportManager", "Received remote answer, applying to WebRTC")
                 webRtcTransport.setRemoteAnswer(remoteSdp)
             }
         }
 
-        // Handle incoming connection requests (wakeups from peer)
         signalingProvider.setConnectionRequestListener {
-            if (!isPaused) {
-                Log.d("TransportManager", "Received connection request (wakeup) from remote peer. Restarting connection (isInitiator=$isInitiator)...")
-                isConnected = false
+            if (!isConnected && !isPaused) {
+                Log.d("TransportManager", "Received connection request (wakeup) from remote peer. Restarting connection...")
                 reconnectJob?.cancel()
                 connectionTimeoutJob?.cancel()
                 webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
-            } else {
-                Log.d("TransportManager", "Ignoring remote wakeup because connection is paused by user.")
             }
         }
 
@@ -267,7 +256,7 @@ class TransportManager(
                         return@forEach // Skip if it's not time to retry yet
                     }
                     if (msg.retryCount > 5) {
-                        queueManager.markFailed(msg.messageId)
+                        queueManager.markFailed(msg.messageId) // Add this to QueueManager later
                         return@forEach
                     }
 
@@ -317,20 +306,15 @@ class TransportManager(
         if (paused) {
             Log.d("TransportManager", "Connection paused manually. Tearing down connection.")
             reconnectJob?.cancel()
-            connectionTimeoutJob?.cancel()
             webRtcTransport.suspendConnection()
         } else {
             Log.d("TransportManager", "Connection resumed manually. Attempting start.")
             webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
-            if (!isInitiator) {
-                signalingProvider.requestConnection()
-            }
         }
     }
 
     fun requestConnection() {
-        Log.d("TransportManager", "Manual connection request initiated (isInitiator=$isInitiator)")
-        isConnected = false
+        Log.d("TransportManager", "Manual connection request initiated.")
         reconnectJob?.cancel()
         connectionTimeoutJob?.cancel()
         webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
@@ -338,8 +322,6 @@ class TransportManager(
     }
 
     fun close() {
-        reconnectJob?.cancel()
-        connectionTimeoutJob?.cancel()
         scope.cancel()
     }
 }

@@ -3,18 +3,19 @@ package com.example.securesmsforwarder.p2p.webrtc
 import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.launch
 import org.webrtc.*
 import org.webrtc.PeerConnection.IceServer
 import java.nio.ByteBuffer
-import java.util.Collections
 
 /**
  * Handles the direct P2P transport using WebRTC DataChannels.
- * STUN and multi-port / TCP TURN fallback are used for carrier NAT traversal
- * across international networks (e.g. Hungary <-> India).
+ * STUN is used for discovery (NAT traversal), but TURN is explicitly disabled 
+ * to guarantee no middleman relays our encrypted traffic.
  */
 class WebRtcDirectTransport(private val context: Context) {
 
@@ -27,11 +28,6 @@ class WebRtcDirectTransport(private val context: Context) {
     private var peerConnection: PeerConnection? = null
     private var dataChannel: DataChannel? = null
     private var useTrickleIce: Boolean = false
-
-    // Pending remote ICE candidates queue (buffered until remote description is set)
-    private val pendingRemoteIceCandidates = Collections.synchronizedList(mutableListOf<IceCandidate>())
-    @Volatile
-    private var isRemoteDescriptionSet = false
 
     // Flows for signaling
     private val _localSdpFlow = MutableSharedFlow<SessionDescription>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
@@ -69,60 +65,21 @@ class WebRtcDirectTransport(private val context: Context) {
         
         _connectionStateFlow.tryEmit(PeerConnection.PeerConnectionState.CONNECTING)
         
-        synchronized(pendingRemoteIceCandidates) {
-            isRemoteDescriptionSet = false
-            pendingRemoteIceCandidates.clear()
-        }
-
         dataChannel?.close()
         peerConnection?.close()
         
-        val iceServers = listOf(
-            // Google Public STUN
-            IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
-            IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
-            IceServer.builder("stun:stun2.l.google.com:19302").createIceServer(),
-            IceServer.builder("stun:openrelay.metered.ca:80").createIceServer(),
-            
-            // Metered.ca OpenRelay UDP TURN
-            IceServer.builder("turn:openrelay.metered.ca:80")
-                .setUsername("openrelayproject")
-                .setPassword("openrelayproject")
-                .createIceServer(),
-            IceServer.builder("turn:openrelay.metered.ca:443")
-                .setUsername("openrelayproject")
-                .setPassword("openrelayproject")
-                .createIceServer(),
-            IceServer.builder("turn:openrelay.metered.ca:3478")
-                .setUsername("openrelayproject")
-                .setPassword("openrelayproject")
-                .createIceServer(),
-                
-            // Metered.ca OpenRelay TCP TURN (bypasses UDP blocks / strict mobile CGNATs)
-            IceServer.builder("turn:openrelay.metered.ca:80?transport=tcp")
-                .setUsername("openrelayproject")
-                .setPassword("openrelayproject")
-                .createIceServer(),
-            IceServer.builder("turn:openrelay.metered.ca:443?transport=tcp")
-                .setUsername("openrelayproject")
-                .setPassword("openrelayproject")
-                .createIceServer(),
-            IceServer.builder("turns:openrelay.metered.ca:443?transport=tcp")
-                .setUsername("openrelayproject")
-                .setPassword("openrelayproject")
-                .createIceServer(),
-            IceServer.builder("turn:openrelay.metered.ca:3478?transport=tcp")
-                .setUsername("openrelayproject")
-                .setPassword("openrelayproject")
-                .createIceServer()
-        )
+        // Use STUN for direct P2P discovery, and TURN as a fallback for strict NATs/firewalls
+        val stunServer = IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
         
-        val rtcConfig = PeerConnection.RTCConfiguration(iceServers).apply {
+        // Metered.ca OpenRelay (Free Public TURN for testing)
+        // TODO: Replace with your own Metered credentials for production
+        val turnServer = IceServer.builder("turn:openrelay.metered.ca:80")
+            .setUsername("openrelayproject")
+            .setPassword("openrelayproject")
+            .createIceServer()
+        
+        val rtcConfig = PeerConnection.RTCConfiguration(listOf(stunServer, turnServer)).apply {
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
-            continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
-            bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
-            tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.ENABLED
-            iceCandidatePoolSize = 2
         }
 
         peerConnection = peerConnectionFactory?.createPeerConnection(rtcConfig, createPeerConnectionObserver())
@@ -157,9 +114,6 @@ class WebRtcDirectTransport(private val context: Context) {
         peerConnection?.setRemoteDescription(object : SdpObserver {
             override fun onCreateSuccess(p0: SessionDescription?) {}
             override fun onSetSuccess() {
-                Log.d(TAG, "Successfully set remote description (type: ${sdp.type})")
-                drainPendingIceCandidates()
-                
                 if (sdp.type == SessionDescription.Type.OFFER) {
                     peerConnection?.createAnswer(createSdpObserver { answer ->
                         peerConnection?.setLocalDescription(createSdpObserver(), answer)
@@ -198,37 +152,18 @@ class WebRtcDirectTransport(private val context: Context) {
             override fun onCreateSuccess(sdp: SessionDescription?) {}
             override fun onSetSuccess() {
                 Log.d(TAG, "Successfully set remote answer")
-                drainPendingIceCandidates()
             }
             override fun onCreateFailure(error: String?) {}
             override fun onSetFailure(error: String?) {
                 Log.e(TAG, "Failed to set remote answer: $error. Restarting connection to generate new offer!")
+                // Since we only receive answers when we are the initiator, it's safe to assume true here.
                 startConnection(isInitiator = true, useTrickleIce = useTrickleIce)
             }
         }, sdp)
     }
 
     fun addRemoteIceCandidate(candidate: IceCandidate) {
-        synchronized(pendingRemoteIceCandidates) {
-            if (!isRemoteDescriptionSet || peerConnection?.remoteDescription == null) {
-                Log.d(TAG, "Queueing remote ICE candidate (remote description not set yet): ${candidate.sdpMid}")
-                pendingRemoteIceCandidates.add(candidate)
-            } else {
-                Log.d(TAG, "Adding remote ICE candidate directly: ${candidate.sdpMid}")
-                peerConnection?.addIceCandidate(candidate)
-            }
-        }
-    }
-
-    private fun drainPendingIceCandidates() {
-        synchronized(pendingRemoteIceCandidates) {
-            isRemoteDescriptionSet = true
-            Log.d(TAG, "Draining ${pendingRemoteIceCandidates.size} pending remote ICE candidates")
-            for (candidate in pendingRemoteIceCandidates) {
-                peerConnection?.addIceCandidate(candidate)
-            }
-            pendingRemoteIceCandidates.clear()
-        }
+        peerConnection?.addIceCandidate(candidate)
     }
 
     fun sendMessage(data: ByteArray): Boolean {
@@ -237,10 +172,6 @@ class WebRtcDirectTransport(private val context: Context) {
     }
 
     fun suspendConnection() {
-        synchronized(pendingRemoteIceCandidates) {
-            isRemoteDescriptionSet = false
-            pendingRemoteIceCandidates.clear()
-        }
         dataChannel?.close()
         peerConnection?.close()
         peerConnection = null
@@ -249,10 +180,6 @@ class WebRtcDirectTransport(private val context: Context) {
     }
 
     fun close() {
-        synchronized(pendingRemoteIceCandidates) {
-            isRemoteDescriptionSet = false
-            pendingRemoteIceCandidates.clear()
-        }
         dataChannel?.close()
         peerConnection?.close()
         peerConnectionFactory?.dispose()
@@ -263,12 +190,8 @@ class WebRtcDirectTransport(private val context: Context) {
 
     private fun createPeerConnectionObserver(): PeerConnection.Observer {
         return object : PeerConnection.Observer {
-            override fun onSignalingChange(state: PeerConnection.SignalingState) {
-                Log.d(TAG, "Signaling State changed: $state")
-            }
-            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
-                Log.d(TAG, "ICE Connection State changed: $state")
-            }
+            override fun onSignalingChange(state: PeerConnection.SignalingState) {}
+            override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {}
             override fun onConnectionChange(newState: PeerConnection.PeerConnectionState) {
                 Log.d(TAG, "Connection State changed: $newState")
                 if (newState == PeerConnection.PeerConnectionState.CONNECTED) {
@@ -297,7 +220,6 @@ class WebRtcDirectTransport(private val context: Context) {
             override fun onAddStream(stream: MediaStream) {}
             override fun onRemoveStream(stream: MediaStream) {}
             override fun onDataChannel(channel: DataChannel) {
-                Log.d(TAG, "Remote DataChannel received: ${channel.label()}")
                 dataChannel = channel
                 dataChannel?.registerObserver(createDataChannelObserver())
             }

@@ -40,21 +40,16 @@ data class SignalingEnvelope(
     }
 
     companion object {
-        fun fromSessionDescription(
-            sdp: SessionDescription,
-            deviceId: String,
-            sessionId: String = UUID.randomUUID().toString(),
-            ttlMillis: Long = 60 * 1000L // 60 seconds validity for real-time signaling
-        ): SignalingEnvelope {
+        fun fromSessionDescription(sdp: SessionDescription, deviceId: String): SignalingEnvelope {
             val role = if (sdp.type == SessionDescription.Type.OFFER) "OFFER" else "ANSWER"
             val now = System.currentTimeMillis()
             return SignalingEnvelope(
-                sessionId = sessionId,
+                sessionId = UUID.randomUUID().toString(),
                 deviceId = deviceId,
                 role = role,
                 sdp = sdp.description,
                 createdAt = now,
-                expiresAt = now + ttlMillis
+                expiresAt = now + (10 * 60 * 1000) // 10 minutes expiry
             )
         }
 
