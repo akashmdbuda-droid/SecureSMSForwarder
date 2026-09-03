@@ -7,15 +7,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.launch
 import org.webrtc.*
 import org.webrtc.PeerConnection.IceServer
 import java.nio.ByteBuffer
 
 /**
  * Handles the direct P2P transport using WebRTC DataChannels.
- * STUN is used for discovery (NAT traversal), but TURN is explicitly disabled 
- * to guarantee no middleman relays our encrypted traffic.
+ * Multi-port STUN and TCP TURN fallback are used for carrier NAT traversal
+ * across international networks (e.g. Hungary <-> India).
  */
 class WebRtcDirectTransport(private val context: Context) {
 
@@ -59,6 +58,10 @@ class WebRtcDirectTransport(private val context: Context) {
             .createPeerConnectionFactory()
     }
 
+    fun isDataChannelOpen(): Boolean {
+        return dataChannel?.state() == DataChannel.State.OPEN
+    }
+
     fun startConnection(isInitiator: Boolean, useTrickleIce: Boolean = false) {
         this.useTrickleIce = useTrickleIce
         Log.d(TAG, "startConnection called. isInitiator=$isInitiator, useTrickleIce=$useTrickleIce")
@@ -68,18 +71,50 @@ class WebRtcDirectTransport(private val context: Context) {
         dataChannel?.close()
         peerConnection?.close()
         
-        // Use STUN for direct P2P discovery, and TURN as a fallback for strict NATs/firewalls
-        val stunServer = IceServer.builder("stun:stun.l.google.com:19302").createIceServer()
+        val iceServers = listOf(
+            IceServer.builder("stun:stun.l.google.com:19302").createIceServer(),
+            IceServer.builder("stun:stun1.l.google.com:19302").createIceServer(),
+            IceServer.builder("stun:stun2.l.google.com:19302").createIceServer(),
+            IceServer.builder("stun:openrelay.metered.ca:80").createIceServer(),
+            
+            // Metered.ca OpenRelay UDP TURN
+            IceServer.builder("turn:openrelay.metered.ca:80")
+                .setUsername("openrelayproject")
+                .setPassword("openrelayproject")
+                .createIceServer(),
+            IceServer.builder("turn:openrelay.metered.ca:443")
+                .setUsername("openrelayproject")
+                .setPassword("openrelayproject")
+                .createIceServer(),
+            IceServer.builder("turn:openrelay.metered.ca:3478")
+                .setUsername("openrelayproject")
+                .setPassword("openrelayproject")
+                .createIceServer(),
+                
+            // Metered.ca OpenRelay TCP TURN (bypasses strict UDP firewall blocks)
+            IceServer.builder("turn:openrelay.metered.ca:80?transport=tcp")
+                .setUsername("openrelayproject")
+                .setPassword("openrelayproject")
+                .createIceServer(),
+            IceServer.builder("turn:openrelay.metered.ca:443?transport=tcp")
+                .setUsername("openrelayproject")
+                .setPassword("openrelayproject")
+                .createIceServer(),
+            IceServer.builder("turns:openrelay.metered.ca:443?transport=tcp")
+                .setUsername("openrelayproject")
+                .setPassword("openrelayproject")
+                .createIceServer(),
+            IceServer.builder("turn:openrelay.metered.ca:3478?transport=tcp")
+                .setUsername("openrelayproject")
+                .setPassword("openrelayproject")
+                .createIceServer()
+        )
         
-        // Metered.ca OpenRelay (Free Public TURN for testing)
-        // TODO: Replace with your own Metered credentials for production
-        val turnServer = IceServer.builder("turn:openrelay.metered.ca:80")
-            .setUsername("openrelayproject")
-            .setPassword("openrelayproject")
-            .createIceServer()
-        
-        val rtcConfig = PeerConnection.RTCConfiguration(listOf(stunServer, turnServer)).apply {
+        val rtcConfig = PeerConnection.RTCConfiguration(iceServers).apply {
             sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+            continualGatheringPolicy = PeerConnection.ContinualGatheringPolicy.GATHER_CONTINUALLY
+            bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
+            tcpCandidatePolicy = PeerConnection.TcpCandidatePolicy.ENABLED
         }
 
         peerConnection = peerConnectionFactory?.createPeerConnection(rtcConfig, createPeerConnectionObserver())
@@ -167,6 +202,9 @@ class WebRtcDirectTransport(private val context: Context) {
     }
 
     fun sendMessage(data: ByteArray): Boolean {
+        if (dataChannel?.state() != DataChannel.State.OPEN) {
+            return false
+        }
         val buffer = DataChannel.Buffer(ByteBuffer.wrap(data), true)
         return dataChannel?.send(buffer) ?: false
     }

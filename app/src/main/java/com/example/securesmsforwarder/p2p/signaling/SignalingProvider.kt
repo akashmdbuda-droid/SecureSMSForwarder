@@ -4,7 +4,7 @@ import org.webrtc.SessionDescription
 import org.webrtc.IceCandidate
 
 /**
- * Interface to abstract the WebRTC signaling mechanism (e.g., Manual Copy/Paste, Rendezvous Server, etc.)
+ * Interface to abstract WebRTC signaling and fallback End-to-End Encrypted relay messaging.
  */
 interface SignalingProvider {
     /**
@@ -42,4 +42,24 @@ interface SignalingProvider {
      * Sets a callback to be invoked when a connection request (ping) is received.
      */
     fun setConnectionRequestListener(listener: () -> Unit) {}
+
+    /**
+     * Dispatches an E2EE encrypted message via fallback relay (e.g. Firebase Realtime DB).
+     */
+    fun sendEncryptedRelayMessage(messageId: String, ciphertextBase64: String): Boolean = false
+
+    /**
+     * Listens for incoming E2EE encrypted messages received via the fallback relay.
+     */
+    fun setEncryptedRelayMessageListener(listener: (messageId: String, ciphertextBase64: String) -> Unit) {}
+
+    /**
+     * Checks if the fallback relay is connected and available.
+     */
+    fun isRelayAvailable(): Boolean = false
+
+    /**
+     * Sets a callback to be notified when relay connectivity state changes.
+     */
+    fun setRelayAvailabilityListener(listener: (Boolean) -> Unit) {}
 }

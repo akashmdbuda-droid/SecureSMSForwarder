@@ -97,7 +97,7 @@ class MessageQueueManager(
         messageDao.updateMessageState(messageId, MessageState.DELIVERED)
     }
 
-    suspend fun insertViewerMessage(msgId: String, body: String, sender: String, forwarder: String, timestamp: Long) {
+    suspend fun insertViewerMessage(msgId: String, body: String, sender: String, forwarder: String, timestamp: Long): Boolean {
         val entity = MessageEntity(
             messageId = msgId,
             sequenceNumber = System.currentTimeMillis(),
@@ -110,7 +110,8 @@ class MessageQueueManager(
             nextRetryTime = 0L,
             isRead = false
         )
-        messageDao.insertMessage(entity)
+        val rowId = messageDao.insertMessage(entity)
+        return rowId != -1L
     }
 
     suspend fun deleteAll() {

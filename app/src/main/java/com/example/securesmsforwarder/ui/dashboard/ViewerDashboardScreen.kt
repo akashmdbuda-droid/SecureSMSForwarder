@@ -44,7 +44,7 @@ fun ViewerDashboardScreen(
     onMessageClick: (String) -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val isConnected = connectionStatus.equals("CONNECTED", ignoreCase = true)
+    val isConnected = connectionStatus.startsWith("CONNECTED", ignoreCase = true)
 
     Scaffold(
         bottomBar = {
@@ -101,9 +101,9 @@ fun ViewerDashboardScreen(
 
 @Composable
 fun ViewerMainTab(connectionStatus: String, onConnect: () -> Unit) {
-    val isConnected = connectionStatus.equals("CONNECTED", ignoreCase = true)
+    val isConnected = connectionStatus.startsWith("CONNECTED", ignoreCase = true)
     val isConnecting = connectionStatus.equals("CONNECTING", ignoreCase = true) || connectionStatus.equals("NEW", ignoreCase = true) || connectionStatus.equals("CHECKING", ignoreCase = true)
-    val isFailed = connectionStatus.equals("FAILED", ignoreCase = true)
+    val isFailed = connectionStatus.equals("FAILED", ignoreCase = true) || connectionStatus.equals("DISCONNECTED", ignoreCase = true) || connectionStatus.equals("OFFLINE", ignoreCase = true)
     
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -129,11 +129,12 @@ fun ViewerMainTab(connectionStatus: String, onConnect: () -> Unit) {
         if (isConnecting) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth(0.5f))
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Establishing P2P link...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Connecting to paired device...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else if (isFailed) {
-            Text("Connection dropped. The sender might be offline.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            Text("Disconnected. Paired device will auto-sync when online.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         } else if (isConnected) {
-            Text("Viewer P2P • Strong Signal", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val subText = if (connectionStatus.contains("Direct P2P", ignoreCase = true)) "Direct P2P • High Speed" else "End-to-End Encrypted Relay • Always Connected"
+            Text(subText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         
         Spacer(modifier = Modifier.height(48.dp))

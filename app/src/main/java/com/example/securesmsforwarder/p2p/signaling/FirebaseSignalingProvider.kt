@@ -2,6 +2,7 @@ package com.example.securesmsforwarder.p2p.signaling
 
 import android.util.Log
 import com.example.securesmsforwarder.core.domain.DeviceRole
+import com.google.firebase.database.ChildEventListener
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -17,13 +18,38 @@ class FirebaseSignalingProvider(
     private val database = FirebaseDatabase.getInstance()
     private var remoteSdpListener: ((SessionDescription) -> Unit)? = null
     private var connectionRequestListener: (() -> Unit)? = null
-
-    // Sender writes to "signaling/$localDeviceId/offer"
-    // Viewer reads from "signaling/$remoteDeviceId/offer" and writes to "signaling/$localDeviceId/answer"
+    private var encryptedRelayListener: ((String, String) -> Unit)? = null
+    private var relayAvailabilityListener: ((Boolean) -> Unit)? = null
+    private var isFirebaseConnected: Boolean = false
 
     init {
+        listenForFirebaseConnection()
         listenForRemoteSdp()
         listenForConnectionRequests()
+        listenForRelayMessages()
+    }
+
+    private fun listenForFirebaseConnection() {
+        val connectedRef = database.getReference(".info/connected")
+        connectedRef.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val connected = snapshot.getValue(Boolean::class.java) ?: false
+                isFirebaseConnected = connected
+                Log.d("FirebaseSignaling", "Firebase connection state: $connected")
+                relayAvailabilityListener?.invoke(connected)
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("FirebaseSignaling", "Firebase .info/connected cancelled", error.toException())
+            }
+        })
+    }
+
+    override fun isRelayAvailable(): Boolean = isFirebaseConnected
+
+    override fun setRelayAvailabilityListener(listener: (Boolean) -> Unit) {
+        relayAvailabilityListener = listener
+        listener.invoke(isFirebaseConnected)
     }
 
     override fun onLocalSdpReady(sdp: SessionDescription) {
@@ -51,7 +77,7 @@ class FirebaseSignalingProvider(
     override fun requestConnection() {
         val ref = database.getReference("signaling/$remoteDeviceId/wakeup")
         ref.setValue(System.currentTimeMillis()).addOnSuccessListener {
-            Log.d("FirebaseSignaling", "Sent wakeup ping to remote peer")
+            Log.d("FirebaseSignaling", "Sent wakeup ping to remote peer: $remoteDeviceId")
         }.addOnFailureListener {
             Log.e("FirebaseSignaling", "Failed to send wakeup ping", it)
         }
@@ -77,7 +103,7 @@ class FirebaseSignalingProvider(
 
     override fun setRemoteIceCandidateListener(listener: (org.webrtc.IceCandidate) -> Unit) {
         val ref = database.getReference("signaling/$remoteDeviceId/candidates")
-        ref.addChildEventListener(object : com.google.firebase.database.ChildEventListener {
+        ref.addChildEventListener(object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
                 try {
                     val sdpMid = snapshot.child("sdpMid").getValue(String::class.java) ?: return
@@ -113,7 +139,7 @@ class FirebaseSignalingProvider(
                             Log.d("FirebaseSignaling", "Received remote $expectedType from Firebase")
                             remoteSdpListener?.invoke(envelope.toSessionDescription())
                             
-                            // Once processed, we can clear it to avoid reprocessing on reconnect
+                            // Once processed, clear it to avoid reprocessing on reconnect
                             ref.removeValue() 
                         } else {
                             Log.e("FirebaseSignaling", "Device ID mismatch in received SDP")
@@ -145,6 +171,49 @@ class FirebaseSignalingProvider(
 
             override fun onCancelled(error: DatabaseError) {
                 Log.e("FirebaseSignaling", "Firebase wakeup listen cancelled", error.toException())
+            }
+        })
+    }
+
+    // --- E2EE Fallback Relay Messaging ---
+
+    override fun sendEncryptedRelayMessage(messageId: String, ciphertextBase64: String): Boolean {
+        val ref = database.getReference("messages/$remoteDeviceId/inbox/$messageId")
+        ref.setValue(ciphertextBase64).addOnSuccessListener {
+            Log.d("FirebaseSignaling", "Relay message $messageId sent to $remoteDeviceId")
+        }.addOnFailureListener {
+            Log.e("FirebaseSignaling", "Failed to send relay message $messageId", it)
+        }
+        return true
+    }
+
+    override fun setEncryptedRelayMessageListener(listener: (messageId: String, ciphertextBase64: String) -> Unit) {
+        encryptedRelayListener = listener
+    }
+
+    private fun listenForRelayMessages() {
+        val ref = database.getReference("messages/$localDeviceId/inbox")
+        ref.addChildEventListener(object : ChildEventListener {
+            override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
+                val messageId = snapshot.key ?: return
+                val ciphertextBase64 = snapshot.getValue(String::class.java) ?: return
+                Log.d("FirebaseSignaling", "Received incoming encrypted relay message: $messageId")
+                
+                try {
+                    encryptedRelayListener?.invoke(messageId, ciphertextBase64)
+                } catch (e: Exception) {
+                    Log.e("FirebaseSignaling", "Error processing relay message $messageId", e)
+                } finally {
+                    // Consume and delete from Firebase immediately to ensure no storage footprint
+                    snapshot.ref.removeValue()
+                }
+            }
+
+            override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onChildRemoved(snapshot: DataSnapshot) {}
+            override fun onChildMoved(snapshot: DataSnapshot, previousChildName: String?) {}
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("FirebaseSignaling", "Firebase relay inbox listener cancelled", error.toException())
             }
         })
     }

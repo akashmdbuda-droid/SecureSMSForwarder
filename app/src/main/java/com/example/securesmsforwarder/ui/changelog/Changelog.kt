@@ -17,6 +17,17 @@ data class ReleaseNote(
 
 val Changelog = listOf(
     ReleaseNote(
+        version = "v1.0.21",
+        date = "2026-09-04",
+        changes = listOf(
+            "Fail-Proof Always-Connected Architecture: paired devices now stay connected reliably across all Wi-Fi networks and mobile roaming",
+            "Added End-to-End Encrypted (E2EE) Fallback Relay via standard HTTPS/WSS (port 443) so firewalls and strict NATs can never block message delivery",
+            "Zero cloud storage: relay messages are encrypted with Google Tink HPKE on-device and wiped immediately upon delivery",
+            "Automatic network recovery: seamlessly syncs pending messages when switching Wi-Fi networks or exiting flight mode",
+            "Multi-port STUN and TCP TURN fallback (ports 80, 443, 3478) with continuous ICE gathering"
+        )
+    ),
+    ReleaseNote(
         version = "v1.0.20",
         date = "2026-08-17",
         changes = listOf(

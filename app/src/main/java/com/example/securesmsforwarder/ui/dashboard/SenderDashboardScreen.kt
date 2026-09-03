@@ -35,7 +35,7 @@ fun SenderDashboardScreen(
     onRequestBatteryOptimization: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val isConnected = connectionStatus.equals("CONNECTED", ignoreCase = true)
+    val isConnected = connectionStatus.startsWith("CONNECTED", ignoreCase = true)
     
     Scaffold(
         bottomBar = {
@@ -93,9 +93,9 @@ fun SenderDashboardScreen(
 
 @Composable
 fun SenderMainTab(connectionStatus: String, onConnect: () -> Unit, onTest: () -> Unit) {
-    val isConnected = connectionStatus.equals("CONNECTED", ignoreCase = true)
+    val isConnected = connectionStatus.startsWith("CONNECTED", ignoreCase = true)
     val isConnecting = connectionStatus.equals("CONNECTING", ignoreCase = true) || connectionStatus.equals("NEW", ignoreCase = true) || connectionStatus.equals("CHECKING", ignoreCase = true)
-    val isFailed = connectionStatus.equals("FAILED", ignoreCase = true)
+    val isFailed = connectionStatus.equals("FAILED", ignoreCase = true) || connectionStatus.equals("DISCONNECTED", ignoreCase = true) || connectionStatus.equals("OFFLINE", ignoreCase = true)
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -121,11 +121,12 @@ fun SenderMainTab(connectionStatus: String, onConnect: () -> Unit, onTest: () ->
         if (isConnecting) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth(0.5f))
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Establishing P2P link...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Connecting to paired device...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else if (isFailed) {
-            Text("Connection dropped. The viewer might be offline.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            Text("Disconnected. Paired device will auto-sync when online.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         } else if (isConnected) {
-            Text("Direct P2P • Strong Signal", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val subText = if (connectionStatus.contains("Direct P2P", ignoreCase = true)) "Direct P2P • High Speed" else "End-to-End Encrypted Relay • Always Connected"
+            Text(subText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         
         Spacer(modifier = Modifier.height(48.dp))
@@ -183,30 +184,35 @@ fun SenderQueueTab(queuedMessages: List<MessageEntity>, onWipeClick: () -> Unit)
 
 @Composable
 fun ConnectionTab(connectionStatus: String, settingsManager: SettingsManager) {
-    val isConnected = connectionStatus == "CONNECTED"
+    val isConnected = connectionStatus.startsWith("CONNECTED", ignoreCase = true)
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Text("Connection Metrics", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(24.dp))
         
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                val statusText = when (connectionStatus) {
-                    "CONNECTED" -> "Online"
-                    "PAUSED" -> "Paused"
+                val statusText = when {
+                    isConnected -> "Online"
+                    connectionStatus == "PAUSED" -> "Paused"
                     else -> "Offline"
                 }
-                val statusColor = when (connectionStatus) {
-                    "CONNECTED" -> MaterialTheme.colorScheme.primary
-                    "PAUSED" -> MaterialTheme.colorScheme.secondary
+                val statusColor = when {
+                    isConnected -> MaterialTheme.colorScheme.primary
+                    connectionStatus == "PAUSED" -> MaterialTheme.colorScheme.secondary
                     else -> MaterialTheme.colorScheme.error
                 }
                 MetricRow("Status", statusText, statusColor)
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                 MetricRow("Latency", if (isConnected) "${kotlin.random.Random.nextInt(15, 60)} ms" else "N/A", MaterialTheme.colorScheme.onSurface)
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                MetricRow("Transport Type", if (isConnected) "WebRTC P2P" else "None", MaterialTheme.colorScheme.onSurface)
+                val transportType = when {
+                    connectionStatus.contains("Direct P2P", ignoreCase = true) -> "WebRTC P2P"
+                    isConnected -> "Encrypted E2EE Relay"
+                    else -> "None"
+                }
+                MetricRow("Transport Type", transportType, MaterialTheme.colorScheme.onSurface)
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                MetricRow("Encryption", if (isConnected) "Tink AEAD AES256-GCM" else "Disabled", MaterialTheme.colorScheme.onSurface)
+                MetricRow("Encryption", if (isConnected) "Tink HPKE (X25519 + ChaCha20)" else "Disabled", MaterialTheme.colorScheme.onSurface)
             }
         }
         

@@ -94,4 +94,24 @@ class MessageQueueManagerTest {
         val decodedPayload = String(savedEntity.encryptedPayload!!, Charsets.UTF_8)
         assertEquals("Your OTP is 123456", decodedPayload)
     }
+
+    @Test
+    fun testInsertViewerMessage_returnsTrueForNewMessage() = runBlocking {
+        val fakeDao = FakeMessageDao()
+        val queueManager = MessageQueueManager(fakeDao)
+
+        val isNew = queueManager.insertViewerMessage(
+            msgId = "msg-123",
+            body = "Test body",
+            sender = "+9876543210",
+            forwarder = "DEVICE_A",
+            timestamp = 1650000000L
+        )
+
+        assertEquals(true, isNew)
+        assertEquals(1, fakeDao.messages.size)
+        val saved = fakeDao.messages["msg-123"]
+        assertNotNull(saved)
+        assertEquals(MessageState.DELIVERED, saved?.state)
+    }
 }
