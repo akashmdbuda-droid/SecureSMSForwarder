@@ -38,6 +38,7 @@ fun ViewerDashboardScreen(
     onPairDeviceClick: () -> Unit,
     onRemoveTrustClick: () -> Unit,
     onEstablishConnectionClick: () -> Unit,
+    onDisconnectClick: () -> Unit = {},
     onClearMessagesClick: () -> Unit,
     onResetRoleClick: () -> Unit,
     onRequestBatteryOptimization: () -> Unit,
@@ -84,7 +85,7 @@ fun ViewerDashboardScreen(
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when (selectedTab) {
-                0 -> ViewerMainTab(connectionStatus, onEstablishConnectionClick)
+                0 -> ViewerMainTab(connectionStatus, onEstablishConnectionClick, onDisconnectClick)
                 1 -> ViewerInboxTab(messages, onClearMessagesClick, onMessageClick)
                 2 -> ConnectionTab(connectionStatus, settingsManager) // Reused from SenderDashboardScreen.kt
                 3 -> SecurityTab(identityFingerprint, trustedDevicesCount, deviceName, onPairDeviceClick, onRemoveTrustClick) // Reused
@@ -100,7 +101,7 @@ fun ViewerDashboardScreen(
 }
 
 @Composable
-fun ViewerMainTab(connectionStatus: String, onConnect: () -> Unit) {
+fun ViewerMainTab(connectionStatus: String, onConnect: () -> Unit, onDisconnect: () -> Unit) {
     val isConnected = connectionStatus.startsWith("CONNECTED", ignoreCase = true)
     val isConnecting = connectionStatus.equals("CONNECTING", ignoreCase = true) || connectionStatus.equals("NEW", ignoreCase = true) || connectionStatus.equals("CHECKING", ignoreCase = true)
     val isFailed = connectionStatus.equals("FAILED", ignoreCase = true) || connectionStatus.equals("DISCONNECTED", ignoreCase = true) || connectionStatus.equals("OFFLINE", ignoreCase = true)
@@ -139,8 +140,38 @@ fun ViewerMainTab(connectionStatus: String, onConnect: () -> Unit) {
         
         Spacer(modifier = Modifier.height(48.dp))
         
-        Button(onClick = onConnect, modifier = Modifier.fillMaxWidth(0.5f)) {
-            Text(if (isConnected || isConnecting) "Reconnect" else "Connect")
+        if (isConnected || isConnecting) {
+            Row(
+                modifier = Modifier.fillMaxWidth(0.9f),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Button(
+                    onClick = onDisconnect,
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Disconnect")
+                }
+                OutlinedButton(
+                    onClick = onConnect,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Reconnect")
+                }
+            }
+        } else {
+            Button(
+                onClick = onConnect, 
+                modifier = Modifier.fillMaxWidth(0.6f)
+            ) {
+                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Connect")
+            }
         }
     }
 }

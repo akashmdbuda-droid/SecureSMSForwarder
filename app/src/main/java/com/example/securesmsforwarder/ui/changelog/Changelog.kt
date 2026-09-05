@@ -17,6 +17,15 @@ data class ReleaseNote(
 
 val Changelog = listOf(
     ReleaseNote(
+        version = "v1.0.22",
+        date = "2026-09-05",
+        changes = listOf(
+            "Added a dedicated Disconnect button on the main dashboard for instant manual disconnect",
+            "Added seamless one-tap Reconnect button when connected",
+            "Improved connection controls: tapping Connect immediately unpauses and initiates connection sync"
+        )
+    ),
+    ReleaseNote(
         version = "v1.0.21",
         date = "2026-09-04",
         changes = listOf(

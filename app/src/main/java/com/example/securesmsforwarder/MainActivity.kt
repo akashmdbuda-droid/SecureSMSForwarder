@@ -29,7 +29,7 @@ class MainActivity : FragmentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        android.widget.Toast.makeText(this, "🎉 GLORIOUS SUCCESS! Welcome to v1.0.21!", android.widget.Toast.LENGTH_LONG).show()
+        android.widget.Toast.makeText(this, "🎉 GLORIOUS SUCCESS! Welcome to v1.0.22!", android.widget.Toast.LENGTH_LONG).show()
 
         enableEdgeToEdge()
         val roleManager = RoleManager(this)
@@ -305,17 +305,24 @@ class MainActivity : FragmentActivity() {
                             },
                             onRemoveTrustClick = onRemoveTrustClick,
                             onEstablishConnectionClick = {
+                                settingsManager.isConnectionPaused = false
                                 if (trustStore.getTrustedDeviceId() != null) {
                                     val transportManager = com.example.securesmsforwarder.background.ForwardingService.activeTransportManager
                                     if (transportManager != null) {
                                         transportManager.requestConnection()
-                                        android.widget.Toast.makeText(this@MainActivity, "Reconnecting...", android.widget.Toast.LENGTH_SHORT).show()
+                                        android.widget.Toast.makeText(this@MainActivity, "Connecting...", android.widget.Toast.LENGTH_SHORT).show()
                                     } else {
                                         android.widget.Toast.makeText(this@MainActivity, "Signaling Service not running", android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 } else {
                                     showSignalingScreen = true
                                 }
+                            },
+                            onDisconnectClick = {
+                                settingsManager.isConnectionPaused = true
+                                val transportManager = com.example.securesmsforwarder.background.ForwardingService.activeTransportManager
+                                transportManager?.setConnectionPaused(true)
+                                android.widget.Toast.makeText(this@MainActivity, "Disconnected", android.widget.Toast.LENGTH_SHORT).show()
                             },
                             onSendTestMessageClick = {
                                 lifecycleScope.launch(Dispatchers.IO) {
@@ -420,19 +427,24 @@ class MainActivity : FragmentActivity() {
                             },
                             onRemoveTrustClick = onRemoveTrustClick,
                             onEstablishConnectionClick = {
-                                if (settingsManager.isConnectionPaused) {
-                                    showUnpauseDialog = true
-                                } else if (trustStore.getTrustedDeviceId() != null) {
+                                settingsManager.isConnectionPaused = false
+                                if (trustStore.getTrustedDeviceId() != null) {
                                     val transportManager = com.example.securesmsforwarder.background.ForwardingService.activeTransportManager
                                     if (transportManager != null) {
                                         transportManager.requestConnection()
-                                        android.widget.Toast.makeText(this@MainActivity, "Reconnecting...", android.widget.Toast.LENGTH_SHORT).show()
+                                        android.widget.Toast.makeText(this@MainActivity, "Connecting...", android.widget.Toast.LENGTH_SHORT).show()
                                     } else {
                                         android.widget.Toast.makeText(this@MainActivity, "Signaling Service not running", android.widget.Toast.LENGTH_SHORT).show()
                                     }
                                 } else {
                                     showSignalingScreen = true
                                 }
+                            },
+                            onDisconnectClick = {
+                                settingsManager.isConnectionPaused = true
+                                val transportManager = com.example.securesmsforwarder.background.ForwardingService.activeTransportManager
+                                transportManager?.setConnectionPaused(true)
+                                android.widget.Toast.makeText(this@MainActivity, "Disconnected", android.widget.Toast.LENGTH_SHORT).show()
                             },
                             onClearMessagesClick = {
                                 com.example.securesmsforwarder.core.util.BiometricHelper.promptBiometricAuth(

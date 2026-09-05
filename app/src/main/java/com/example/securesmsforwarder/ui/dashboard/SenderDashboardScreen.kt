@@ -28,6 +28,7 @@ fun SenderDashboardScreen(
     onPairDeviceClick: () -> Unit,
     onRemoveTrustClick: () -> Unit,
     onEstablishConnectionClick: () -> Unit,
+    onDisconnectClick: () -> Unit = {},
     onSendTestMessageClick: () -> Unit,
     onResetRoleClick: () -> Unit,
     onClearMessagesClick: () -> Unit,
@@ -75,7 +76,7 @@ fun SenderDashboardScreen(
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when (selectedTab) {
-                0 -> SenderMainTab(connectionStatus, onEstablishConnectionClick, onSendTestMessageClick)
+                0 -> SenderMainTab(connectionStatus, onEstablishConnectionClick, onDisconnectClick, onSendTestMessageClick)
                 1 -> SenderQueueTab(queuedMessages, onClearMessagesClick)
                 2 -> ConnectionTab(connectionStatus, settingsManager)
                 3 -> SecurityTab(identityFingerprint, trustedDevicesCount, deviceName, onPairDeviceClick, onRemoveTrustClick)
@@ -92,7 +93,12 @@ fun SenderDashboardScreen(
 }
 
 @Composable
-fun SenderMainTab(connectionStatus: String, onConnect: () -> Unit, onTest: () -> Unit) {
+fun SenderMainTab(
+    connectionStatus: String, 
+    onConnect: () -> Unit, 
+    onDisconnect: () -> Unit, 
+    onTest: () -> Unit
+) {
     val isConnected = connectionStatus.startsWith("CONNECTED", ignoreCase = true)
     val isConnecting = connectionStatus.equals("CONNECTING", ignoreCase = true) || connectionStatus.equals("NEW", ignoreCase = true) || connectionStatus.equals("CHECKING", ignoreCase = true)
     val isFailed = connectionStatus.equals("FAILED", ignoreCase = true) || connectionStatus.equals("DISCONNECTED", ignoreCase = true) || connectionStatus.equals("OFFLINE", ignoreCase = true)
@@ -131,13 +137,47 @@ fun SenderMainTab(connectionStatus: String, onConnect: () -> Unit, onTest: () ->
         
         Spacer(modifier = Modifier.height(48.dp))
         
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Button(onClick = onConnect, modifier = Modifier.weight(1f)) {
-                Text(if (isConnected || isConnecting) "Reconnect" else "Connect")
+        Column(
+            modifier = Modifier.fillMaxWidth(0.9f),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (isConnected || isConnecting) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Button(
+                        onClick = onDisconnect,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Disconnect")
+                    }
+                    OutlinedButton(
+                        onClick = onConnect,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Reconnect")
+                    }
+                }
+            } else {
+                Button(
+                    onClick = onConnect,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Connect")
+                }
             }
+
             Button(
                 onClick = onTest, 
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
             ) {
                 Text("Test SMS")
