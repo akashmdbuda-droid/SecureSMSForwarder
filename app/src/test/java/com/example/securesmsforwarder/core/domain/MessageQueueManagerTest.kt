@@ -66,6 +66,18 @@ class MessageQueueManagerTest {
         override suspend fun getRecentMessagesFromSender(sender: String, minTime: Long, maxTime: Long): List<MessageEntity> {
             return messages.values.filter { it.senderDeviceId == sender && it.timestamp in minTime..maxTime }
         }
+
+        override suspend fun requeueFailedMessages(): Int {
+            val failed = messages.values.filter { it.state == MessageState.FAILED }
+            failed.forEach {
+                messages[it.messageId] = it.copy(state = MessageState.QUEUED, retryCount = 0, nextRetryTime = 0)
+            }
+            return failed.size
+        }
+
+        override fun getFailedMessagesCount(): Flow<Int> {
+            return flowOf(messages.values.count { it.state == MessageState.FAILED })
+        }
     }
 
     @Test
@@ -113,5 +125,26 @@ class MessageQueueManagerTest {
         val saved = fakeDao.messages["msg-123"]
         assertNotNull(saved)
         assertEquals(MessageState.DELIVERED, saved?.state)
+    }
+
+    @Test
+    fun testRequeueFailedMessages_resetsToQueued() = runBlocking {
+        val fakeDao = FakeMessageDao()
+        val queueManager = MessageQueueManager(fakeDao)
+
+        fakeDao.messages["msg-fail"] = MessageEntity(
+            messageId = "msg-fail",
+            sequenceNumber = 1L,
+            timestamp = 1000L,
+            senderDeviceId = "123",
+            encryptedPayload = "fail".toByteArray(),
+            state = MessageState.FAILED,
+            retryCount = 6
+        )
+
+        val count = queueManager.requeueFailedMessages()
+        assertEquals(1, count)
+        assertEquals(MessageState.QUEUED, fakeDao.messages["msg-fail"]?.state)
+        assertEquals(0, fakeDao.messages["msg-fail"]?.retryCount)
     }
 }

@@ -70,7 +70,9 @@ class MessageQueueManager(
     suspend fun markTransmitting(messageId: String) {
         val entity = messageDao.getMessageById(messageId)
         if (entity != null) {
-            val nextRetry = System.currentTimeMillis() + (Math.pow(2.0, entity.retryCount.toDouble()) * 2000L).toLong()
+            // Capped exponential backoff: 2s, 4s, 8s, 16s, 32s, max 60s
+            val backoffMs = minOf(60_000L, (Math.pow(2.0, minOf(entity.retryCount, 5).toDouble()) * 2000L).toLong())
+            val nextRetry = System.currentTimeMillis() + backoffMs
             messageDao.updateMessage(entity.copy(state = MessageState.TRANSMITTING, retryCount = entity.retryCount + 1, nextRetryTime = nextRetry))
         }
     }
@@ -80,12 +82,20 @@ class MessageQueueManager(
         val messages = messageDao.getPendingMessages().first()
         messages.filter { it.state == MessageState.TRANSMITTING && it.nextRetryTime < now }
             .forEach { msg ->
-                if (msg.retryCount > 5) {
+                if (msg.retryCount > 25) {
                     messageDao.updateMessageState(msg.messageId, MessageState.FAILED)
                 } else {
                     messageDao.updateMessageState(msg.messageId, MessageState.QUEUED)
                 }
             }
+    }
+
+    suspend fun requeueFailedMessages(): Int {
+        return messageDao.requeueFailedMessages()
+    }
+
+    fun getFailedMessagesCountFlow(): kotlinx.coroutines.flow.Flow<Int> {
+        return messageDao.getFailedMessagesCount()
     }
 
     suspend fun markFailed(messageId: String) {

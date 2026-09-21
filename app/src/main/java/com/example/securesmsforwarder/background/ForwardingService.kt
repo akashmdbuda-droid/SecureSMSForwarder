@@ -48,6 +48,9 @@ class ForwardingService : Service() {
         var activeTransportManager: TransportManager? = null
             private set
             
+        const val ACTION_DRAIN_QUEUE = "ACTION_DRAIN_QUEUE"
+        const val ACTION_RESTART = "ACTION_RESTART"
+            
         var connectionStateFlow: kotlinx.coroutines.flow.StateFlow<String>? = null
             private set
     }
@@ -63,7 +66,16 @@ class ForwardingService : Service() {
             .setOngoing(true)
             .build()
 
-        startForeground(NOTIFICATION_ID, notification)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING or
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
 
         initializeTransport()
         registerNetworkCallback()
@@ -184,11 +196,17 @@ class ForwardingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == "ACTION_RESTART") {
-            smsObserver?.stop()
-            webRtcTransport?.close()
-            transportManager?.close()
-            initializeTransport()
+        when (intent?.action) {
+            "ACTION_RESTART", ACTION_RESTART -> {
+                smsObserver?.stop()
+                webRtcTransport?.close()
+                transportManager?.close()
+                initializeTransport()
+            }
+            ACTION_DRAIN_QUEUE -> {
+                Log.d(TAG, "Handling ACTION_DRAIN_QUEUE. Draining pending messages.")
+                transportManager?.triggerQueueDrain()
+            }
         }
         return START_STICKY
     }

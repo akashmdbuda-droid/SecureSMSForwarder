@@ -69,6 +69,7 @@ class SmsObserver(
                         
                         Log.d("SmsObserver", "Found new SMS via observer from $address")
                         queueManager.enqueueMessage(parsed)
+                        com.example.securesmsforwarder.background.ForwardingService.activeTransportManager?.triggerQueueDrain()
                     }
                 }
             } catch (e: Exception) {

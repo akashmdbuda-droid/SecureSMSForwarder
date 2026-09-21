@@ -17,6 +17,18 @@ data class ReleaseNote(
 
 val Changelog = listOf(
     ReleaseNote(
+        version = "v1.0.23",
+        date = "2026-09-21",
+        changes = listOf(
+            "Fixed false 'Connected' relay status: peer liveness is now verified via real-time presence heartbeats",
+            "Safe delivery handshake: relay messages are preserved until confirmed local decryption and database persistence",
+            "Resilient background delivery: added Android 14 remote messaging service support and wakeful SMS processing to eliminate Doze drops",
+            "Auto-drain on reconnect: sender automatically catches up pending queue as soon as viewer comes online",
+            "Added 'Sync Now' on Viewer and 'Retry Failed' on Sender for on-demand message retrieval and retry",
+            "Increased queue retry limit to 25 with exponential backoff"
+        )
+    ),
+    ReleaseNote(
         version = "v1.0.22",
         date = "2026-09-05",
         changes = listOf(

@@ -3,6 +3,7 @@ package com.example.securesmsforwarder.sms
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import com.example.securesmsforwarder.background.ForwardingService
 import com.example.securesmsforwarder.core.domain.MessageQueueManager
 import com.example.securesmsforwarder.storage.AppDatabase
 import kotlinx.coroutines.CoroutineScope
@@ -30,26 +31,31 @@ object SmsHistoryScanner {
             val db = AppDatabase.getDatabase(context)
             val queueManager = MessageQueueManager(db.messageDao())
             
-            var count = 0
+            val parsedList = mutableListOf<ParsedSms>()
             while (c.moveToNext()) {
                 val address = c.getString(addrIdx) ?: "Unknown"
                 val body = c.getString(bodyIdx) ?: ""
                 val date = c.getLong(dateIdx)
                 
-                val parsed = ParsedSms(
-                    sender = address,
-                    body = body,
-                    timestamp = date,
-                    subscriptionId = -1,
-                    messageId = "hist_${c.getLong(idIdx)}"
+                parsedList.add(
+                    ParsedSms(
+                        sender = address,
+                        body = body,
+                        timestamp = date,
+                        subscriptionId = -1,
+                        messageId = "hist_${c.getLong(idIdx)}"
+                    )
                 )
-                
-                CoroutineScope(Dispatchers.IO).launch {
+            }
+            
+            Log.d("SmsHistoryScanner", "Enqueuing ${parsedList.size} historical messages.")
+            CoroutineScope(Dispatchers.IO).launch {
+                for (parsed in parsedList) {
                     queueManager.enqueueMessage(parsed)
                 }
-                count++
+                Log.d("SmsHistoryScanner", "Finished enqueuing historical messages. Triggering queue drain.")
+                ForwardingService.activeTransportManager?.triggerQueueDrain()
             }
-            Log.d("SmsHistoryScanner", "Synced $count historical messages.")
         }
     }
 }

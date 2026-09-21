@@ -328,6 +328,17 @@ class MainActivity : FragmentActivity() {
                                 lifecycleScope.launch(Dispatchers.IO) {
                                     val queueManager = com.example.securesmsforwarder.core.domain.MessageQueueManager(db.messageDao())
                                     queueManager.enqueueTestMessage()
+                                    com.example.securesmsforwarder.background.ForwardingService.activeTransportManager?.triggerQueueDrain()
+                                }
+                            },
+                            onRetryFailedClick = {
+                                lifecycleScope.launch(Dispatchers.IO) {
+                                    val queueManager = com.example.securesmsforwarder.core.domain.MessageQueueManager(db.messageDao())
+                                    val count = queueManager.requeueFailedMessages()
+                                    withContext(Dispatchers.Main) {
+                                        android.widget.Toast.makeText(this@MainActivity, "Re-queued $count messages", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                    com.example.securesmsforwarder.background.ForwardingService.activeTransportManager?.triggerQueueDrain()
                                 }
                             },
                             onResetRoleClick = {
@@ -438,6 +449,15 @@ class MainActivity : FragmentActivity() {
                                     }
                                 } else {
                                     showSignalingScreen = true
+                                }
+                            },
+                            onSyncClick = {
+                                val transportManager = com.example.securesmsforwarder.background.ForwardingService.activeTransportManager
+                                if (transportManager != null) {
+                                    transportManager.requestConnection()
+                                    android.widget.Toast.makeText(this@MainActivity, "Syncing with Sender...", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    android.widget.Toast.makeText(this@MainActivity, "Signaling Service not running", android.widget.Toast.LENGTH_SHORT).show()
                                 }
                             },
                             onDisconnectClick = {

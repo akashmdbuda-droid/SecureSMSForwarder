@@ -50,11 +50,13 @@ interface SignalingProvider {
 
     /**
      * Listens for incoming E2EE encrypted messages received via the fallback relay.
+     * The callback provides an onProcessed(success) handler so the provider only deletes the message
+     * after it has been safely decrypted and saved.
      */
-    fun setEncryptedRelayMessageListener(listener: (messageId: String, ciphertextBase64: String) -> Unit) {}
+    fun setEncryptedRelayMessageListener(listener: (messageId: String, ciphertextBase64: String, onProcessed: (Boolean) -> Unit) -> Unit) {}
 
     /**
-     * Checks if the fallback relay is connected and available.
+     * Checks if the fallback relay is connected and available locally.
      */
     fun isRelayAvailable(): Boolean = false
 
@@ -62,4 +64,19 @@ interface SignalingProvider {
      * Sets a callback to be notified when relay connectivity state changes.
      */
     fun setRelayAvailabilityListener(listener: (Boolean) -> Unit) {}
+
+    /**
+     * Checks if the remote paired peer is confirmed online via presence.
+     */
+    fun isPeerOnline(): Boolean = false
+
+    /**
+     * Gets the timestamp when the remote peer was last seen online.
+     */
+    fun getPeerLastSeen(): Long = 0L
+
+    /**
+     * Sets a callback to be notified when the remote peer's presence changes.
+     */
+    fun setPeerPresenceListener(listener: (isOnline: Boolean, lastSeen: Long) -> Unit) {}
 }

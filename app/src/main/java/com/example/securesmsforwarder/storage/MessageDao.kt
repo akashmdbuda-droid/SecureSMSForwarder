@@ -41,4 +41,10 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages WHERE senderDeviceId = :sender AND timestamp >= :minTime AND timestamp <= :maxTime")
     suspend fun getRecentMessagesFromSender(sender: String, minTime: Long, maxTime: Long): List<MessageEntity>
+
+    @Query("UPDATE messages SET state = 'QUEUED', retryCount = 0, nextRetryTime = 0 WHERE state = 'FAILED'")
+    suspend fun requeueFailedMessages(): Int
+
+    @Query("SELECT COUNT(*) FROM messages WHERE state = 'FAILED'")
+    fun getFailedMessagesCount(): Flow<Int>
 }

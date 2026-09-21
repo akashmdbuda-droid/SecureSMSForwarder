@@ -42,7 +42,8 @@ fun ViewerDashboardScreen(
     onClearMessagesClick: () -> Unit,
     onResetRoleClick: () -> Unit,
     onRequestBatteryOptimization: () -> Unit,
-    onMessageClick: (String) -> Unit
+    onMessageClick: (String) -> Unit,
+    onSyncClick: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val isConnected = connectionStatus.startsWith("CONNECTED", ignoreCase = true)
@@ -85,8 +86,8 @@ fun ViewerDashboardScreen(
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when (selectedTab) {
-                0 -> ViewerMainTab(connectionStatus, onEstablishConnectionClick, onDisconnectClick)
-                1 -> ViewerInboxTab(messages, onClearMessagesClick, onMessageClick)
+                0 -> ViewerMainTab(connectionStatus, onEstablishConnectionClick, onDisconnectClick, onSyncClick)
+                1 -> ViewerInboxTab(messages, onClearMessagesClick, onMessageClick, onSyncClick)
                 2 -> ConnectionTab(connectionStatus, settingsManager) // Reused from SenderDashboardScreen.kt
                 3 -> SecurityTab(identityFingerprint, trustedDevicesCount, deviceName, onPairDeviceClick, onRemoveTrustClick) // Reused
                 4 -> SettingsTab(
@@ -101,8 +102,14 @@ fun ViewerDashboardScreen(
 }
 
 @Composable
-fun ViewerMainTab(connectionStatus: String, onConnect: () -> Unit, onDisconnect: () -> Unit) {
+fun ViewerMainTab(
+    connectionStatus: String, 
+    onConnect: () -> Unit, 
+    onDisconnect: () -> Unit,
+    onSync: () -> Unit = {}
+) {
     val isConnected = connectionStatus.startsWith("CONNECTED", ignoreCase = true)
+    val isPeerOffline = connectionStatus.contains("Peer Offline", ignoreCase = true)
     val isConnecting = connectionStatus.equals("CONNECTING", ignoreCase = true) || connectionStatus.equals("NEW", ignoreCase = true) || connectionStatus.equals("CHECKING", ignoreCase = true)
     val isFailed = connectionStatus.equals("FAILED", ignoreCase = true) || connectionStatus.equals("DISCONNECTED", ignoreCase = true) || connectionStatus.equals("OFFLINE", ignoreCase = true)
     
@@ -119,10 +126,12 @@ fun ViewerMainTab(connectionStatus: String, onConnect: () -> Unit, onDisconnect:
             style = MaterialTheme.typography.headlineMedium,
             color = when {
                 isConnected -> MaterialTheme.colorScheme.primary
+                isPeerOffline -> MaterialTheme.colorScheme.secondary
                 isFailed -> MaterialTheme.colorScheme.error
                 isConnecting -> MaterialTheme.colorScheme.secondary
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
+            },
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
         
         Spacer(modifier = Modifier.height(16.dp))
@@ -131,16 +140,18 @@ fun ViewerMainTab(connectionStatus: String, onConnect: () -> Unit, onDisconnect:
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth(0.5f))
             Spacer(modifier = Modifier.height(8.dp))
             Text("Connecting to paired device...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else if (isPeerOffline) {
+            Text("Relay is active. Sender phone is offline or sleeping; messages will deliver once Sender wakes up.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         } else if (isFailed) {
             Text("Disconnected. Paired device will auto-sync when online.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         } else if (isConnected) {
-            val subText = if (connectionStatus.contains("Direct P2P", ignoreCase = true)) "Direct P2P • High Speed" else "End-to-End Encrypted Relay • Always Connected"
+            val subText = if (connectionStatus.contains("Direct P2P", ignoreCase = true)) "Direct P2P • High Speed" else "End-to-End Encrypted Relay • Peer Online"
             Text(subText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         
         Spacer(modifier = Modifier.height(48.dp))
         
-        if (isConnected || isConnecting) {
+        if (isConnected || isConnecting || isPeerOffline) {
             Row(
                 modifier = Modifier.fillMaxWidth(0.9f),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -155,12 +166,12 @@ fun ViewerMainTab(connectionStatus: String, onConnect: () -> Unit, onDisconnect:
                     Text("Disconnect")
                 }
                 OutlinedButton(
-                    onClick = onConnect,
+                    onClick = onSync,
                     modifier = Modifier.weight(1f)
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Reconnect")
+                    Text("Sync Now")
                 }
             }
         } else {
@@ -177,7 +188,12 @@ fun ViewerMainTab(connectionStatus: String, onConnect: () -> Unit, onDisconnect:
 }
 
 @Composable
-fun ViewerInboxTab(messages: List<DisplayMessage>, onClear: () -> Unit, onMessageClick: (String) -> Unit) {
+fun ViewerInboxTab(
+    messages: List<DisplayMessage>,
+    onClear: () -> Unit,
+    onMessageClick: (String) -> Unit,
+    onSyncClick: () -> Unit = {}
+) {
     var selectedSender by remember { mutableStateOf<String?>(null) }
     
     // Auto-detect unique forwarding devices
@@ -251,8 +267,13 @@ fun ViewerInboxTab(messages: List<DisplayMessage>, onClear: () -> Unit, onMessag
         Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("SMS Inbox", style = MaterialTheme.typography.headlineMedium)
-                IconButton(onClick = onClear) {
-                    Icon(Icons.Default.Delete, contentDescription = "Wipe", tint = MaterialTheme.colorScheme.error)
+                Row {
+                    IconButton(onClick = onSyncClick) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Sync", tint = MaterialTheme.colorScheme.primary)
+                    }
+                    IconButton(onClick = onClear) {
+                        Icon(Icons.Default.Delete, contentDescription = "Wipe", tint = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
