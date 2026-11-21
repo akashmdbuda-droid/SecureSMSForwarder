@@ -7,11 +7,9 @@ import android.os.PowerManager
 import android.provider.Telephony
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.example.securesmsforwarder.SecureSmsApplication
 import com.example.securesmsforwarder.background.ForwardingService
 import com.example.securesmsforwarder.core.domain.DeviceRole
-import com.example.securesmsforwarder.core.domain.MessageQueueManager
-import com.example.securesmsforwarder.core.domain.RoleManager
-import com.example.securesmsforwarder.storage.AppDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,8 +36,8 @@ class SmsReceiver : BroadcastReceiver() {
 
         scope.launch {
             try {
-                val db = AppDatabase.getDatabase(context)
-                val queueManager = MessageQueueManager(db.messageDao())
+                val container = SecureSmsApplication.container(context)
+                val queueManager = container.messageQueueManager
 
                 parsedMessages.forEach { sms ->
                     Log.d("SmsReceiver", "Received SMS from ${sms.sender}, length: ${sms.body.length}")
@@ -47,7 +45,7 @@ class SmsReceiver : BroadcastReceiver() {
                 }
 
                 // Ensure ForwardingService is running and trigger an immediate queue drain
-                val roleManager = RoleManager(context)
+                val roleManager = container.roleManager
                 if (roleManager.currentRole == DeviceRole.SENDER) {
                     val activeTransport = ForwardingService.activeTransportManager
                     if (activeTransport != null) {

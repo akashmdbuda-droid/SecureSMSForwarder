@@ -1,37 +1,49 @@
 package com.example.securesmsforwarder.background
 
-import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.Binder
+import android.os.Build
 import android.os.IBinder
-import android.app.PendingIntent
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.example.securesmsforwarder.core.domain.MessageQueueManager
-import com.example.securesmsforwarder.core.domain.SettingsManager
-import com.example.securesmsforwarder.crypto.encryption.MessageEncryption
-import com.example.securesmsforwarder.crypto.identity.KeyManager
+import com.example.securesmsforwarder.AppContainer
+import com.example.securesmsforwarder.MainActivity
+import com.example.securesmsforwarder.SecureSmsApplication
+import com.example.securesmsforwarder.core.domain.DeviceRole
+import com.example.securesmsforwarder.p2p.ConnectionUiState
 import com.example.securesmsforwarder.p2p.TransportManager
-import com.example.securesmsforwarder.p2p.webrtc.WebRtcDirectTransport
-import com.example.securesmsforwarder.pairing.TrustStore
-import com.example.securesmsforwarder.storage.AppDatabase
+import com.example.securesmsforwarder.p2p.relay.FirebaseRelayTransport
+import com.example.securesmsforwarder.sms.SmsObserver
 import com.google.firebase.database.FirebaseDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 class ForwardingService : Service() {
 
+    private val appContainer: AppContainer by lazy { SecureSmsApplication.container(this) }
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var transportScope: CoroutineScope? = null
+
+    @Volatile
     private var transportManager: TransportManager? = null
-    private var webRtcTransport: WebRtcDirectTransport? = null
+    private var smsObserver: SmsObserver? = null
     private var connectivityManager: ConnectivityManager? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
@@ -40,18 +52,18 @@ class ForwardingService : Service() {
         private const val CHANNEL_ID = "ForwardingServiceChannel"
         private const val MESSAGE_CHANNEL_ID = "IncomingMessagesChannel"
         private const val NOTIFICATION_ID = 1
-        
-        // Expose signaling provider to the UI without complex binding for V1
-        var activeSignalingProvider: com.example.securesmsforwarder.p2p.signaling.ManualSignalingProvider? = null
-            private set
-            
+
+        const val ACTION_CONNECT = "com.example.securesmsforwarder.ACTION_CONNECT"
+        const val ACTION_DISCONNECT = "com.example.securesmsforwarder.ACTION_DISCONNECT"
+        const val ACTION_RESTART = "com.example.securesmsforwarder.ACTION_RESTART"
+        const val ACTION_DRAIN_QUEUE = "com.example.securesmsforwarder.ACTION_DRAIN_QUEUE"
+        const val ACTION_WIPE_PEER = "com.example.securesmsforwarder.ACTION_WIPE_PEER"
+
+        private val _connectionUiState = MutableStateFlow(ConnectionUiState())
+        val connectionUiState: StateFlow<ConnectionUiState> = _connectionUiState.asStateFlow()
+
+        @Volatile
         var activeTransportManager: TransportManager? = null
-            private set
-            
-        const val ACTION_DRAIN_QUEUE = "ACTION_DRAIN_QUEUE"
-        const val ACTION_RESTART = "ACTION_RESTART"
-            
-        var connectionStateFlow: kotlinx.coroutines.flow.StateFlow<String>? = null
             private set
     }
 
@@ -61,17 +73,17 @@ class ForwardingService : Service() {
 
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Secure SMS Forwarder")
-            .setContentText("Forwarding service is active to provide real-time connection.")
+            .setContentText("Encrypted relay forwarding service is active.")
             .setSmallIcon(android.R.drawable.ic_secure)
             .setOngoing(true)
             .build()
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             startForeground(
                 NOTIFICATION_ID,
                 notification,
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING or
-                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING or
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
             )
         } else {
             startForeground(NOTIFICATION_ID, notification)
@@ -81,68 +93,89 @@ class ForwardingService : Service() {
         registerNetworkCallback()
     }
 
-    private var smsObserver: com.example.securesmsforwarder.sms.SmsObserver? = null
+    private fun teardownTransport() {
+        smsObserver?.stop()
+        smsObserver = null
+        transportScope?.cancel()
+        transportScope = null
+        transportManager?.close()
+        transportManager = null
+        activeTransportManager = null
+    }
 
     private fun initializeTransport() {
-        val db = AppDatabase.getDatabase(this)
-        webRtcTransport = WebRtcDirectTransport(this)
-        val keyManager = KeyManager(this)
-        
-        // Use the visual fingerprint as a short Device ID for signaling envelopes
-        val deviceId = keyManager.getPublicKeyFingerprint()
-        val roleManager = com.example.securesmsforwarder.core.domain.RoleManager(this)
-        val trustStore = TrustStore(this)
-        
+        teardownTransport()
+
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        transportScope = scope
+
+        val roleManager = appContainer.roleManager
+        val trustStore = appContainer.trustStore
+        val keyManager = appContainer.keyManager
+        val settingsManager = appContainer.settingsManager
+        val queueManager = appContainer.messageQueueManager
+        val storageCipher = appContainer.storageCipher
+        val encryption = appContainer.messageEncryption
+
+        if (roleManager.currentRole == DeviceRole.SENDER) {
+            smsObserver = SmsObserver(this).also { it.start() }
+        }
+
         val remoteDeviceId = trustStore.getTrustedDeviceId()
-        val signaling = if (remoteDeviceId != null) {
-            com.example.securesmsforwarder.p2p.signaling.FirebaseSignalingProvider(
-                localDeviceId = deviceId,
+        if (remoteDeviceId != null) {
+            val localDeviceId = keyManager.getPublicKeyFingerprint()
+            val relayTransport = FirebaseRelayTransport(
+                localDeviceId = localDeviceId,
                 remoteDeviceId = remoteDeviceId,
                 role = roleManager.currentRole
             )
-        } else {
-            com.example.securesmsforwarder.p2p.signaling.ManualSignalingProvider(deviceId, roleManager.currentRole)
-        }
-        
-        transportManager = TransportManager(
-            webRtcTransport = webRtcTransport!!,
-            encryption = MessageEncryption(),
-            keyManager = keyManager,
-            trustStore = trustStore,
-            queueManager = MessageQueueManager(db.messageDao()),
-            signalingProvider = signaling,
-            isInitiator = roleManager.currentRole == com.example.securesmsforwarder.core.domain.DeviceRole.SENDER,
-            onMessageReceived = { sender, body ->
-                showIncomingMessageNotification(sender, body)
-            }
-        )
-        
-        activeTransportManager = transportManager
-        
-        // Only cast if it's the Manual provider for V1 UI, else UI won't show QR
-        activeSignalingProvider = signaling as? com.example.securesmsforwarder.p2p.signaling.ManualSignalingProvider
-        
-        // Bind unified dual-tier connection state to the UI
-        connectionStateFlow = transportManager?.connectionStatusFlow
-        
-        val settingsManager = SettingsManager(this)
-        CoroutineScope(Dispatchers.IO).launch {
-            settingsManager.connectionPausedFlow.collect { isPaused ->
-                transportManager?.setConnectionPaused(isPaused)
-            }
-        }
-        
-        if (roleManager.currentRole == com.example.securesmsforwarder.core.domain.DeviceRole.SENDER) {
-            smsObserver = com.example.securesmsforwarder.sms.SmsObserver(this)
-            smsObserver?.start()
-        }
 
-        if (!settingsManager.isConnectionPaused) {
-            if (roleManager.currentRole == com.example.securesmsforwarder.core.domain.DeviceRole.SENDER) {
-                webRtcTransport?.startConnection(isInitiator = true, useTrickleIce = signaling.supportsTrickleIce())
-            } else if (roleManager.currentRole == com.example.securesmsforwarder.core.domain.DeviceRole.VIEWER) {
-                webRtcTransport?.startConnection(isInitiator = false, useTrickleIce = signaling.supportsTrickleIce())
-                signaling.requestConnection()
+            val tm = TransportManager(
+                relayTransport = relayTransport,
+                encryption = encryption,
+                keyManager = keyManager,
+                trustStore = trustStore,
+                queueManager = queueManager,
+                storageCipher = storageCipher,
+                isInitiator = (roleManager.currentRole == DeviceRole.SENDER),
+                onMessageReceived = { sender, body ->
+                    showIncomingMessageNotification(sender, body)
+                }
+            )
+            transportManager = tm
+            activeTransportManager = tm
+
+            if (settingsManager.isConnectionPaused) {
+                tm.setConnectionPaused(true)
+            } else if (roleManager.currentRole == DeviceRole.VIEWER) {
+                relayTransport.requestWakeup()
+            }
+            _connectionUiState.value = tm.connectionUiState.value
+
+            scope.launch {
+                tm.connectionUiState.collect { state ->
+                    _connectionUiState.value = state
+                }
+            }
+            scope.launch {
+                settingsManager.connectionPausedFlow.collect { isPaused ->
+                    tm.setConnectionPaused(isPaused)
+                }
+            }
+        } else {
+            activeTransportManager = null
+            val initiallyPaused = settingsManager.isConnectionPaused
+            _connectionUiState.value = ConnectionUiState(
+                status = if (initiallyPaused) "PAUSED" else "DISCONNECTED",
+                isPaused = initiallyPaused
+            )
+            scope.launch {
+                settingsManager.connectionPausedFlow.collect { isPaused ->
+                    _connectionUiState.value = ConnectionUiState(
+                        status = if (isPaused) "PAUSED" else "DISCONNECTED",
+                        isPaused = isPaused
+                    )
+                }
             }
         }
     }
@@ -150,33 +183,43 @@ class ForwardingService : Service() {
     private fun registerNetworkCallback() {
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
         connectivityManager = cm
-        
+
         val request = NetworkRequest.Builder()
             .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
             .build()
-            
+
         networkCallback = object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 Log.d(TAG, "Internet connection restored. Resuming Firebase & syncing queue...")
                 FirebaseDatabase.getInstance().goOnline()
-                
-                val settingsManager = SettingsManager(this@ForwardingService)
-                val trustStore = TrustStore(this@ForwardingService)
-                if (!settingsManager.isConnectionPaused && trustStore.getTrustedDeviceId() != null) {
-                    CoroutineScope(Dispatchers.IO).launch {
-                        delay(1000)
-                        Log.d(TAG, "Triggering automatic reconnection and queue drain...")
-                        transportManager?.requestConnection()
+
+                if (!appContainer.settingsManager.isConnectionPaused &&
+                    appContainer.trustStore.getTrustedDeviceId() != null
+                ) {
+                    serviceScope.launch {
+                        delay(1000L)
+                        if (!appContainer.settingsManager.isConnectionPaused) {
+                            Log.d(TAG, "Triggering automatic reconnection and queue drain...")
+                            transportManager?.requestConnection()
+                        }
                     }
                 }
             }
 
             override fun onLost(network: Network) {
-                Log.d(TAG, "Internet connection lost.")
-                FirebaseDatabase.getInstance().goOffline()
+                val activeCaps = cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }
+                val hasValidatedInternet = activeCaps != null &&
+                    activeCaps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+                    activeCaps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                if (!hasValidatedInternet) {
+                    Log.d(TAG, "All validated internet networks lost. Taking Firebase offline.")
+                    FirebaseDatabase.getInstance().goOffline()
+                } else {
+                    Log.d(TAG, "Network lost, but another validated internet network remains active.")
+                }
             }
         }
-        
+
         try {
             cm.registerNetworkCallback(request, networkCallback!!)
         } catch (e: Exception) {
@@ -197,15 +240,48 @@ class ForwardingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            "ACTION_RESTART", ACTION_RESTART -> {
-                smsObserver?.stop()
-                webRtcTransport?.close()
-                transportManager?.close()
+            ACTION_CONNECT -> {
+                Log.d(TAG, "Handling ACTION_CONNECT.")
+                appContainer.settingsManager.isConnectionPaused = false
+                FirebaseDatabase.getInstance().goOnline()
+                if (transportManager == null && appContainer.trustStore.getTrustedDeviceId() != null) {
+                    initializeTransport()
+                }
+                val tm = transportManager
+                if (tm != null) {
+                    tm.setConnectionPaused(false)
+                    tm.requestConnection()
+                } else {
+                    _connectionUiState.value = ConnectionUiState(status = "DISCONNECTED", isPaused = false)
+                }
+            }
+            ACTION_DISCONNECT -> {
+                Log.d(TAG, "Handling ACTION_DISCONNECT.")
+                appContainer.settingsManager.isConnectionPaused = true
+                val tm = transportManager
+                if (tm != null) {
+                    tm.setConnectionPaused(true)
+                } else {
+                    _connectionUiState.value = ConnectionUiState(status = "PAUSED", isPaused = true)
+                }
+            }
+            ACTION_RESTART, "ACTION_RESTART" -> {
+                Log.d(TAG, "Handling ACTION_RESTART.")
                 initializeTransport()
             }
-            ACTION_DRAIN_QUEUE -> {
+            ACTION_DRAIN_QUEUE, "ACTION_DRAIN_QUEUE" -> {
                 Log.d(TAG, "Handling ACTION_DRAIN_QUEUE. Draining pending messages.")
+                if (transportManager == null && appContainer.trustStore.getTrustedDeviceId() != null) {
+                    initializeTransport()
+                }
                 transportManager?.triggerQueueDrain()
+            }
+            ACTION_WIPE_PEER -> {
+                Log.d(TAG, "Handling ACTION_WIPE_PEER.")
+                if (transportManager == null && appContainer.trustStore.getTrustedDeviceId() != null) {
+                    initializeTransport()
+                }
+                transportManager?.sendWipeCommand()
             }
         }
         return START_STICKY
@@ -214,15 +290,16 @@ class ForwardingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         unregisterNetworkCallback()
-        smsObserver?.stop()
-        webRtcTransport?.close()
-        transportManager?.close()
-        transportManager = null
-        activeSignalingProvider = null
-        activeTransportManager = null
+        teardownTransport()
+        serviceScope.cancel()
+        val isPaused = appContainer.settingsManager.isConnectionPaused
+        _connectionUiState.value = ConnectionUiState(
+            status = if (isPaused) "PAUSED" else "DISCONNECTED",
+            isPaused = isPaused
+        )
     }
 
-    inner class LocalBinder : android.os.Binder() {
+    inner class LocalBinder : Binder() {
         fun getService(): ForwardingService = this@ForwardingService
     }
 
@@ -232,27 +309,19 @@ class ForwardingService : Service() {
         return binder
     }
 
-    fun getSignalingProvider(): com.example.securesmsforwarder.p2p.signaling.ManualSignalingProvider? {
-        return transportManager?.signalingProvider as? com.example.securesmsforwarder.p2p.signaling.ManualSignalingProvider
-    }
-
     fun getTransportManager(): TransportManager? {
         return transportManager
-    }
-
-    fun getWebRtcTransport(): WebRtcDirectTransport? {
-        return webRtcTransport
     }
 
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "P2P Forwarding Service",
+            "Encrypted Relay Forwarding Service",
             NotificationManager.IMPORTANCE_LOW
         )
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(channel)
-        
+
         val messageChannel = NotificationChannel(
             MESSAGE_CHANNEL_ID,
             "Incoming Messages",
@@ -260,42 +329,60 @@ class ForwardingService : Service() {
         )
         manager.createNotificationChannel(messageChannel)
     }
-    
+
     private fun showIncomingMessageNotification(sender: String, body: String) {
-        CoroutineScope(Dispatchers.IO).launch {
-            val unreadMessages = AppDatabase.getDatabase(this@ForwardingService).messageDao().getUnreadMessages()
-            
-            val intent = Intent(this@ForwardingService, com.example.securesmsforwarder.MainActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        if (!appContainer.settingsManager.isNotificationsEnabled) {
+            return
+        }
+        serviceScope.launch {
+            try {
+                val unreadMessages = appContainer.database.messageDao().getUnreadMessages()
+
+                val intent = Intent(this@ForwardingService, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                }
+                val pendingIntent = PendingIntent.getActivity(
+                    this@ForwardingService,
+                    0,
+                    intent,
+                    PendingIntent.FLAG_IMMUTABLE
+                )
+
+                val inboxStyle = NotificationCompat.InboxStyle()
+
+                // Limit to max 7 lines in the inbox style to avoid huge notifications
+                unreadMessages.take(7).reversed().forEach { msg ->
+                    val text = runCatching {
+                        appContainer.storageCipher.decrypt(msg.encryptedPayload)
+                    }.getOrDefault("[Encrypted message]")
+                    inboxStyle.addLine("${msg.senderDeviceId}: $text")
+                }
+
+                if (unreadMessages.size > 7) {
+                    inboxStyle.setSummaryText("+${unreadMessages.size - 7} more")
+                }
+
+                val title = if (unreadMessages.size > 1) {
+                    "${unreadMessages.size} new messages"
+                } else {
+                    unreadMessages.firstOrNull()?.senderDeviceId ?: sender
+                }
+
+                val notification = NotificationCompat.Builder(this@ForwardingService, MESSAGE_CHANNEL_ID)
+                    .setSmallIcon(android.R.drawable.stat_notify_chat)
+                    .setContentTitle(title)
+                    .setContentText(if (unreadMessages.size > 1) "You have new unread messages" else body)
+                    .setStyle(inboxStyle)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setContentIntent(pendingIntent)
+                    .setAutoCancel(true)
+                    .build()
+
+                val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                manager.notify(2, notification) // Use fixed ID to replace previous notification
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to show incoming message notification", e)
             }
-            val pendingIntent = PendingIntent.getActivity(this@ForwardingService, 0, intent, PendingIntent.FLAG_IMMUTABLE)
-
-            val inboxStyle = NotificationCompat.InboxStyle()
-            
-            // Limit to max 7 lines in the inbox style to avoid huge notifications
-            unreadMessages.take(7).reversed().forEach { msg ->
-                val text = String(msg.encryptedPayload ?: ByteArray(0), Charsets.UTF_8)
-                inboxStyle.addLine("${msg.senderDeviceId}: $text")
-            }
-            
-            if (unreadMessages.size > 7) {
-                inboxStyle.setSummaryText("+${unreadMessages.size - 7} more")
-            }
-
-            val title = if (unreadMessages.size > 1) "${unreadMessages.size} new messages" else unreadMessages.firstOrNull()?.senderDeviceId ?: sender
-
-            val notification = NotificationCompat.Builder(this@ForwardingService, MESSAGE_CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_notify_chat)
-                .setContentTitle(title)
-                .setContentText(if (unreadMessages.size > 1) "You have new unread messages" else body)
-                .setStyle(inboxStyle)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setContentIntent(pendingIntent)
-                .setAutoCancel(true)
-                .build()
-
-            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            manager.notify(2, notification) // Use fixed ID to replace previous notification
         }
     }
 }

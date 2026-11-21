@@ -5,176 +5,115 @@ import android.util.Log
 import com.example.securesmsforwarder.core.domain.MessageQueueManager
 import com.example.securesmsforwarder.crypto.encryption.MessageEncryption
 import com.example.securesmsforwarder.crypto.identity.KeyManager
-import com.example.securesmsforwarder.p2p.webrtc.WebRtcDirectTransport
+import com.example.securesmsforwarder.crypto.storage.StorageCipher
+import com.example.securesmsforwarder.p2p.relay.RelayTransport
 import com.example.securesmsforwarder.pairing.TrustStore
 import com.example.securesmsforwarder.storage.MessageState
-import kotlinx.coroutines.*
+import com.google.crypto.tink.KeysetHandle
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
-import org.webrtc.PeerConnection
-import org.webrtc.SessionDescription
-
-import com.example.securesmsforwarder.p2p.signaling.SignalingProvider
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import org.json.JSONException
+import org.json.JSONObject
 
 /**
- * Coordinates WebRTC, Encrypted Fallback Relay, Encryption, and the Message Queue.
- * Implements a 100% fail-proof dual-tier transport architecture:
- * - Tier 1: Direct WebRTC DataChannel (high-throughput local/STUN/TURN)
- * - Tier 2: E2EE Encrypted Fallback Relay via Firebase Realtime Database
+ * Coordinates the pure End-to-End Encrypted Firebase Relay transport,
+ * Tink HPKE wire encryption, Room at-rest decryption, and serialized queue delivery.
  */
 class TransportManager(
-    val webRtcTransport: WebRtcDirectTransport,
+    private val relayTransport: RelayTransport,
     private val encryption: MessageEncryption,
-    private val keyManager: KeyManager,
+    private val keyManager: KeyManager? = null,
     private val trustStore: TrustStore,
     private val queueManager: MessageQueueManager,
-    val signalingProvider: SignalingProvider,
+    private val storageCipher: StorageCipher,
     private val isInitiator: Boolean,
+    private val localPrivateKeyProvider: () -> KeysetHandle = {
+        requireNotNull(keyManager) { "Either keyManager or localPrivateKeyProvider must be provided" }
+            .getOrGenerateIdentityKeyset()
+    },
+    private val localFingerprintProvider: () -> String = {
+        requireNotNull(keyManager) { "Either keyManager or localFingerprintProvider must be provided" }
+            .getPublicKeyFingerprint()
+    },
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val retryIntervalMs: Long = 3500L,
     var onMessageReceived: ((String, String) -> Unit)? = null
 ) {
     companion object {
         private const val TAG = "TransportManager"
+        private const val MAX_RETRY_COUNT = 25
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var isWebRtcConnected = false
-    private var reconnectJob: Job? = null
-    private var connectionTimeoutJob: Job? = null
-    private var webrtcRetryAttempt = 0
-    var isPaused = false
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val drainMutex = Mutex()
+
+    @Volatile
+    var isPaused: Boolean = false
         private set
 
-    // Unified connection state flow for UI and background service
-    private val _connectionStatusFlow = MutableStateFlow(
-        if (trustStore.getTrustedDeviceId() != null) "CONNECTING" else "DISCONNECTED"
-    )
-    val connectionStatusFlow: StateFlow<String> = _connectionStatusFlow.asStateFlow()
+    @Volatile
+    private var lastError: String? = null
+
+    private val _connectionUiState = MutableStateFlow(computeUiState())
+    val connectionUiState: StateFlow<ConnectionUiState> = _connectionUiState.asStateFlow()
 
     init {
-        // Observe WebRTC connection state
-        scope.launch {
-            webRtcTransport.connectionStateFlow.collectLatest { state ->
-                isWebRtcConnected = state == PeerConnection.PeerConnectionState.CONNECTED
-                Log.d(TAG, "WebRTC State changed: $state")
-                updateConnectionStatus()
-                
-                reconnectJob?.cancel()
-                if (isWebRtcConnected) {
-                    connectionTimeoutJob?.cancel()
-                    webrtcRetryAttempt = 0
-                    Log.d(TAG, "WebRTC P2P direct connection established. Exchanging keys & draining queue.")
-                    
-                    // Auto-Exchange Keys
-                    val serializedLocalKey = keyManager.getSerializedPublicKey()
-                    val keyMsg = "KEY:$serializedLocalKey".toByteArray(Charsets.UTF_8)
-                    webRtcTransport.sendMessage(keyMsg)
-
-                    drainQueue()
-                } else if (state == PeerConnection.PeerConnectionState.FAILED || state == PeerConnection.PeerConnectionState.DISCONNECTED) {
-                    connectionTimeoutJob?.cancel()
-                    if (!isPaused) {
-                        Log.d(TAG, "WebRTC dropped. Fallback relay remains active. Scheduling WebRTC reconnect...")
-                        reconnectJob = launch {
-                            delay(5000)
-                            Log.d(TAG, "Executing auto-reconnect...")
-                            webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
-                        }
-                    }
-                } else if (state == PeerConnection.PeerConnectionState.NEW || state == PeerConnection.PeerConnectionState.CONNECTING) {
-                    connectionTimeoutJob?.cancel()
-                    if (!isPaused) {
-                        connectionTimeoutJob = launch {
-                            // Backoff WebRTC connection timeout so it doesn't spin in an aggressive 15s reset loop
-                            val backoff = minOf(120_000L, 20_000L + (webrtcRetryAttempt * 15_000L))
-                            webrtcRetryAttempt++
-                            delay(backoff)
-                            Log.w(TAG, "WebRTC connection attempt timed out ($state). Fallback relay active. Refreshing WebRTC.")
-                            webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
-                        }
-                    }
-                }
-            }
+        relayTransport.setErrorListener { error ->
+            lastError = error
+            updateConnectionUiState()
         }
 
-        // Observe relay connectivity
-        signalingProvider.setRelayAvailabilityListener { isAvailable ->
+        relayTransport.setRelayAvailabilityListener { isAvailable ->
             Log.d(TAG, "Relay availability changed: $isAvailable")
-            updateConnectionStatus()
+            updateConnectionUiState()
             if (isAvailable && !isPaused) {
                 drainQueue()
             }
         }
 
-        // Observe peer presence: when peer comes online, re-queue failed messages and drain immediately
-        signalingProvider.setPeerPresenceListener { isOnline, lastSeen ->
+        relayTransport.setPeerPresenceListener { isOnline, lastSeen ->
             Log.d(TAG, "Peer presence changed: online=$isOnline, lastSeen=$lastSeen")
-            updateConnectionStatus()
+            updateConnectionUiState()
             if (isOnline && !isPaused) {
                 scope.launch {
+                    if (isPaused) return@launch
                     val requeued = queueManager.requeueFailedMessages()
                     if (requeued > 0) {
                         Log.d(TAG, "Peer is back online! Requeued $requeued failed messages for delivery.")
                     }
-                    drainQueue()
+                    drainQueueInternal()
                 }
             }
         }
 
-        // Observe local SDP generation and pass to Signaling Provider
-        scope.launch {
-            webRtcTransport.localSdpFlow.collectLatest { sdp ->
-                signalingProvider.onLocalSdpReady(sdp)
-            }
-        }
-
-        // Observe local ICE candidates
-        scope.launch {
-            webRtcTransport.localIceCandidatesFlow.collect { candidate ->
-                if (signalingProvider.supportsTrickleIce()) {
-                    signalingProvider.onLocalIceCandidateReady(candidate)
+        relayTransport.setWakeupListener {
+            Log.d(TAG, "Received wakeup ping from remote peer.")
+            if (!isPaused) {
+                scope.launch {
+                    if (isPaused) return@launch
+                    queueManager.requeueFailedMessages()
+                    drainQueueInternal()
                 }
             }
         }
 
-        // Wire up remote ICE candidates
-        signalingProvider.setRemoteIceCandidateListener { candidate ->
-            webRtcTransport.addRemoteIceCandidate(candidate)
-        }
-
-        // Wire up Signaling Provider to WebRTC Transport
-        signalingProvider.setRemoteSdpListener { remoteSdp: SessionDescription ->
-            if (remoteSdp.type == SessionDescription.Type.OFFER) {
-                Log.d(TAG, "Received remote offer, cancelling any pending reconnect job")
-                reconnectJob?.cancel()
-                webRtcTransport.setRemoteDescription(remoteSdp)
-            } else {
-                webRtcTransport.setRemoteAnswer(remoteSdp)
-            }
-        }
-
-        signalingProvider.setConnectionRequestListener {
-            if (!isWebRtcConnected && !isPaused) {
-                Log.d(TAG, "Received connection request (wakeup) from remote peer. Restarting WebRTC connection...")
-                reconnectJob?.cancel()
-                connectionTimeoutJob?.cancel()
-                webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
-            }
-            // Upon remote wakeup, re-queue failed messages and immediately drain
-            scope.launch {
-                queueManager.requeueFailedMessages()
-                drainQueue()
-            }
-        }
-
-        // Wire up Tier 2: E2EE Encrypted Fallback Relay messages with safe acknowledgment
-        signalingProvider.setEncryptedRelayMessageListener { messageId, ciphertextBase64, onProcessed ->
+        relayTransport.setEncryptedRelayMessageListener { messageId, ciphertextBase64, onProcessed ->
             scope.launch {
                 try {
                     val ciphertext = Base64.decode(ciphertextBase64, Base64.NO_WRAP)
-                    Log.d(TAG, "Processing message $messageId received via E2EE Fallback Relay (${ciphertext.size} bytes)")
+                    Log.d(TAG, "Processing message $messageId received via E2EE Relay (${ciphertext.size} bytes)")
                     val success = processIncomingCiphertext(ciphertext)
                     onProcessed(success)
                 } catch (e: Exception) {
@@ -184,216 +123,196 @@ class TransportManager(
             }
         }
 
-        // Wire up Tier 1: Direct WebRTC DataChannel incoming messages
-        observeIncomingMessages()
-        
-        // Start continuous background retry and queue draining loop
         startRetryLoop()
     }
 
-    private fun updateConnectionStatus() {
+    private fun computeUiState(): ConnectionUiState {
+        val paused = isPaused
+        val relayAvailable = !paused && relayTransport.isRelayAvailable()
+        val peerOnline = !paused && relayTransport.isPeerOnline()
         val status = when {
-            isPaused -> "PAUSED"
+            paused -> "PAUSED"
             trustStore.getTrustedDeviceId() == null -> "DISCONNECTED"
-            isWebRtcConnected -> "CONNECTED (Direct P2P)"
-            signalingProvider.isRelayAvailable() && signalingProvider.isPeerOnline() -> "CONNECTED (Encrypted Relay)"
-            signalingProvider.isRelayAvailable() && !signalingProvider.isPeerOnline() -> "RELAY STANDBY (Peer Offline)"
-            signalingProvider.isRelayAvailable() -> "CONNECTED (Encrypted Relay)"
+            relayAvailable && peerOnline -> "CONNECTED (Encrypted Relay)"
+            relayAvailable && !peerOnline -> "RELAY STANDBY (Peer Offline)"
             else -> "CONNECTING"
         }
-        _connectionStatusFlow.value = status
+        return ConnectionUiState(
+            status = status,
+            isRelayConnected = relayAvailable,
+            isPeerOnline = peerOnline,
+            peerLastSeen = relayTransport.getPeerLastSeen(),
+            isPaused = paused,
+            lastError = lastError
+        )
+    }
+
+    private fun updateConnectionUiState() {
+        _connectionUiState.value = computeUiState()
     }
 
     private fun startRetryLoop() {
         scope.launch {
             while (isActive) {
                 if (!isPaused && trustStore.getTrustedDeviceId() != null) {
-                    drainQueue()
+                    drainQueueInternal()
                     queueManager.checkRetries()
                 }
-                delay(3500) // Check and sync every 3.5 seconds
+                delay(retryIntervalMs)
             }
         }
     }
 
-    private fun observeIncomingMessages() {
-        scope.launch {
-            webRtcTransport.incomingMessagesFlow.collect { ciphertext ->
-                processIncomingCiphertext(ciphertext)
-            }
-        }
-    }
-
-    private suspend fun processIncomingCiphertext(ciphertext: ByteArray): Boolean {
+    internal suspend fun processIncomingCiphertext(ciphertext: ByteArray): Boolean {
         return try {
-            val rawStr = String(ciphertext, Charsets.UTF_8)
-            if (rawStr.startsWith("KEY:")) {
-                val peerKey = rawStr.removePrefix("KEY:")
-                val fingerprint = com.example.securesmsforwarder.crypto.identity.KeyManager.computeFingerprint(peerKey)
-                trustStore.addTrustedPeer(fingerprint, peerKey)
-                return true
-            }
-
-            val localKeyset = keyManager.getOrGenerateIdentityKeyset()
+            val localKeyset = localPrivateKeyProvider()
             val plaintextBytes = encryption.decrypt(ciphertext, localKeyset)
             val plaintext = String(plaintextBytes, Charsets.UTF_8)
 
-            try {
-                val json = org.json.JSONObject(plaintext)
-                val type = json.optString("type")
+            val json = try {
+                JSONObject(plaintext)
+            } catch (e: JSONException) {
+                Log.w(TAG, "Rejecting non-JSON decrypted payload", e)
+                return false
+            }
 
-                when (type) {
-                    "WIPE" -> {
-                        if (isInitiator) {
-                            Log.w(TAG, "Sender ignoring unauthorized WIPE command from Viewer.")
-                        } else {
-                            Log.d(TAG, "Received WIPE command. Clearing database.")
-                            queueManager.deleteAll()
-                        }
-                        true
-                    }
-                    "ACK" -> {
-                        if (!isInitiator) {
-                            Log.w(TAG, "Viewer ignoring ACK command.")
-                        } else {
-                            val msgId = json.optString("id")
-                            Log.d(TAG, "Received ACK for $msgId. Marking DELIVERED.")
-                            queueManager.markAcknowledged(msgId)
-                        }
-                        true
-                    }
-                    "SMS" -> {
-                        if (isInitiator) {
-                            Log.w(TAG, "Sender ignoring incoming SMS payload.")
-                            true
-                        } else {
-                            val msgId = json.getString("id")
-                            val body = json.getString("body")
-                            val sender = json.optString("sender", "Unknown Sender")
-                            val forwarder = json.optString("forwarder", "Unknown Device")
-                            val timestamp = json.optLong("timestamp", System.currentTimeMillis())
-
-                            Log.d(TAG, "Received SMS $msgId from $sender via $forwarder")
-                            val isNew = queueManager.insertViewerMessage(msgId, body, sender, forwarder, timestamp)
-                            if (isNew) {
-                                onMessageReceived?.invoke(sender, body)
-                            }
-
-                            // Send ACK back via WebRTC or Relay
-                            sendAck(msgId)
-                            true
-                        }
-                    }
-                    else -> {
-                        Log.e(TAG, "Unknown JSON payload type: $type")
-                        true
-                    }
-                }
-            } catch (e: org.json.JSONException) {
-                // Fallback for legacy plain-text payload
-                if (plaintext == "WIPE:ALL") {
-                    if (!isInitiator) {
+            when (val type = json.optString("type")) {
+                "WIPE" -> {
+                    if (isInitiator) {
+                        Log.w(TAG, "Sender ignoring unauthorized WIPE command from Viewer.")
+                    } else {
                         Log.d(TAG, "Received WIPE command. Clearing database.")
                         queueManager.deleteAll()
                     }
                     true
-                } else if (plaintext.startsWith("ACK:")) {
-                    if (isInitiator) {
-                        val msgId = plaintext.removePrefix("ACK:")
-                        Log.d(TAG, "Received legacy ACK for $msgId")
-                        queueManager.markAcknowledged(msgId)
-                    }
-                    true
-                } else if (plaintext.contains("|")) {
+                }
+                "ACK" -> {
                     if (!isInitiator) {
-                        val parts = plaintext.split("|", limit = 2)
-                        if (parts.size == 2) {
-                            val msgId = parts[0]
-                            val body = parts[1]
-                            Log.d(TAG, "Received legacy Viewer Message $msgId")
-                            val isNew = queueManager.insertViewerMessage(msgId, body, "Unknown Sender", "Unknown Device", System.currentTimeMillis())
-                            if (isNew) {
-                                onMessageReceived?.invoke("Unknown Sender", body)
-                            }
-                            sendAck(msgId)
+                        Log.w(TAG, "Viewer ignoring ACK command.")
+                    } else {
+                        val msgId = json.optString("id")
+                        if (msgId.isNotBlank()) {
+                            Log.d(TAG, "Received ACK for $msgId. Marking DELIVERED.")
+                            queueManager.markAcknowledged(msgId)
                         }
                     }
                     true
-                } else {
+                }
+                "SMS" -> {
+                    if (isInitiator) {
+                        Log.w(TAG, "Sender ignoring incoming SMS payload.")
+                        true
+                    } else {
+                        val msgId = json.getString("id")
+                        val body = json.getString("body")
+                        if (msgId.isBlank()) {
+                            Log.w(TAG, "Rejecting SMS payload with blank id.")
+                            return false
+                        }
+                        val sender = json.optString("sender", "Unknown Sender")
+                        val forwarder = json.optString("forwarder", "Unknown Device")
+                        val timestamp = json.optLong("timestamp", System.currentTimeMillis())
+
+                        Log.d(TAG, "Received SMS $msgId from $sender via $forwarder")
+                        val isNew = queueManager.insertViewerMessage(msgId, body, sender, forwarder, timestamp)
+                        if (isNew) {
+                            onMessageReceived?.invoke(sender, body)
+                        }
+                        sendAck(msgId)
+                        true
+                    }
+                }
+                else -> {
+                    Log.w(TAG, "Rejecting payload with unknown JSON type: '$type'")
                     false
                 }
             }
+        } catch (e: JSONException) {
+            Log.w(TAG, "Rejecting malformed JSON payload", e)
+            false
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to decrypt or process message", e)
+            Log.e(TAG, "Failed to decrypt or process incoming relay message", e)
             false
         }
     }
 
     private fun sendAck(msgId: String) {
         val trustedPeer = trustStore.getTrustedPeerPublicKeyset() ?: return
-        val ackPayload = org.json.JSONObject().apply {
-            put("type", "ACK")
-            put("id", msgId)
-        }.toString()
+        try {
+            val ackPayload = JSONObject().apply {
+                put("type", "ACK")
+                put("id", msgId)
+            }.toString()
 
-        val encAck = encryption.encrypt(ackPayload.toByteArray(Charsets.UTF_8), trustedPeer)
-        
-        // Try direct WebRTC first
-        var sent = webRtcTransport.sendMessage(encAck)
-        if (!sent) {
-            // Fallback to Encrypted Relay
+            val encAck = encryption.encrypt(ackPayload.toByteArray(Charsets.UTF_8), trustedPeer)
             val base64 = Base64.encodeToString(encAck, Base64.NO_WRAP)
-            sent = signalingProvider.sendEncryptedRelayMessage("ACK_$msgId", base64)
+            val sent = relayTransport.sendEncryptedRelayMessage("ACK_$msgId", base64)
+            Log.d(TAG, "Sent ACK for $msgId via E2EE Relay (delivered=$sent)")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send ACK for $msgId", e)
         }
-        Log.d(TAG, "Sent ACK for $msgId (via WebRTC=$sent)")
     }
 
-    fun triggerQueueDrain() {
+    fun triggerQueueDrain(requeueFailed: Boolean = false) {
         scope.launch {
             if (!isPaused && trustStore.getTrustedDeviceId() != null) {
-                queueManager.requeueFailedMessages()
-                drainQueue()
+                if (requeueFailed) {
+                    queueManager.requeueFailedMessages()
+                }
+                drainQueueInternal()
             }
         }
     }
 
     private fun drainQueue() {
         scope.launch {
-            if (isPaused) return@launch
-            val trustedPeerKeyset = trustStore.getTrustedPeerPublicKeyset() ?: return@launch
+            drainQueueInternal()
+        }
+    }
+
+    internal suspend fun drainQueueInternal() {
+        drainMutex.withLock {
+            if (isPaused) return
+            val trustedPeerKeyset = trustStore.getTrustedPeerPublicKeyset() ?: return
             val now = System.currentTimeMillis()
 
             val messages = queueManager.getPendingMessagesFlow().first()
             for (msg in messages) {
-                if (msg.state == MessageState.TRANSMITTING && msg.nextRetryTime > now) {
-                    continue // Not yet time for next retry attempt
+                if (msg.state == MessageState.FAILED) {
+                    continue
                 }
-                if (msg.retryCount > 25) {
+                if (msg.state == MessageState.TRANSMITTING && msg.nextRetryTime > now) {
+                    continue
+                }
+                if (msg.retryCount > MAX_RETRY_COUNT) {
                     queueManager.markFailed(msg.messageId)
                     continue
                 }
 
-                val jsonPayload = org.json.JSONObject().apply {
-                    put("type", "SMS")
-                    put("id", msg.messageId)
-                    put("body", String(msg.encryptedPayload ?: ByteArray(0), Charsets.UTF_8))
-                    put("timestamp", msg.timestamp)
-                    put("sender", msg.senderDeviceId)
-                    put("forwarder", keyManager.getPublicKeyFingerprint())
-                }.toString()
+                try {
+                    val plainBody = storageCipher.decrypt(msg.encryptedPayload)
+                    val jsonPayload = JSONObject().apply {
+                        put("type", "SMS")
+                        put("id", msg.messageId)
+                        put("body", plainBody)
+                        put("timestamp", msg.timestamp)
+                        put("sender", msg.senderDeviceId)
+                        put("forwarder", localFingerprintProvider())
+                    }.toString()
 
-                val ciphertext = encryption.encrypt(jsonPayload.toByteArray(Charsets.UTF_8), trustedPeerKeyset)
-
-                // Dual-tier dispatch: Try WebRTC DataChannel first, fallback to Encrypted Relay
-                var delivered = webRtcTransport.sendMessage(ciphertext)
-                if (!delivered) {
+                    val ciphertext = encryption.encrypt(
+                        jsonPayload.toByteArray(Charsets.UTF_8),
+                        trustedPeerKeyset
+                    )
                     val base64 = Base64.encodeToString(ciphertext, Base64.NO_WRAP)
-                    delivered = signalingProvider.sendEncryptedRelayMessage(msg.messageId, base64)
-                }
+                    val delivered = relayTransport.sendEncryptedRelayMessage(msg.messageId, base64)
 
-                if (delivered) {
-                    queueManager.markTransmitting(msg.messageId)
-                    Log.d(TAG, "Dispatched SMS ${msg.messageId} (attempt: ${msg.retryCount})")
+                    if (delivered) {
+                        queueManager.markTransmitting(msg.messageId)
+                        Log.d(TAG, "Dispatched SMS ${msg.messageId} (attempt: ${msg.retryCount + 1})")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to encrypt or dispatch SMS ${msg.messageId}", e)
                 }
             }
         }
@@ -403,19 +322,16 @@ class TransportManager(
         scope.launch {
             val trustedPeer = trustStore.getTrustedPeerPublicKeyset() ?: return@launch
             try {
-                val wipeMsg = org.json.JSONObject().apply {
+                val wipeMsg = JSONObject().apply {
                     put("type", "WIPE")
                     put("id", "all")
                     put("timestamp", System.currentTimeMillis())
                 }.toString().toByteArray(Charsets.UTF_8)
 
                 val ciphertext = encryption.encrypt(wipeMsg, trustedPeer)
-                var sent = webRtcTransport.sendMessage(ciphertext)
-                if (!sent) {
-                    val base64 = Base64.encodeToString(ciphertext, Base64.NO_WRAP)
-                    sent = signalingProvider.sendEncryptedRelayMessage("WIPE_ALL", base64)
-                }
-                Log.d(TAG, "Sent WIPE command (delivered=$sent)")
+                val base64 = Base64.encodeToString(ciphertext, Base64.NO_WRAP)
+                val sent = relayTransport.sendEncryptedRelayMessage("WIPE_ALL", base64)
+                Log.d(TAG, "Sent WIPE command via E2EE Relay (delivered=$sent)")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to send wipe command", e)
             }
@@ -423,36 +339,40 @@ class TransportManager(
     }
 
     fun setConnectionPaused(paused: Boolean) {
-        if (isPaused == paused) return
+        if (isPaused == paused) {
+            updateConnectionUiState()
+            return
+        }
         isPaused = paused
-        updateConnectionStatus()
         if (paused) {
-            Log.d(TAG, "Connection paused manually. Tearing down connection.")
-            reconnectJob?.cancel()
-            connectionTimeoutJob?.cancel()
-            webRtcTransport.suspendConnection()
+            Log.d(TAG, "Connection paused manually. Detaching relay transport.")
+            relayTransport.goOffline()
+            updateConnectionUiState()
         } else {
-            Log.d(TAG, "Connection resumed manually. Attempting start.")
-            webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
+            Log.d(TAG, "Connection resumed manually. Bringing relay transport online.")
+            lastError = null
+            relayTransport.goOnline()
+            updateConnectionUiState()
             drainQueue()
         }
     }
 
     fun requestConnection() {
         Log.d(TAG, "Connection request/sync initiated.")
-        reconnectJob?.cancel()
-        connectionTimeoutJob?.cancel()
-        webRtcTransport.startConnection(isInitiator, signalingProvider.supportsTrickleIce())
-        signalingProvider.requestConnection()
+        isPaused = false
+        lastError = null
+        updateConnectionUiState()
+        relayTransport.goOnline()
+        updateConnectionUiState()
+        relayTransport.requestWakeup()
         scope.launch {
             queueManager.requeueFailedMessages()
-            drainQueue()
+            drainQueueInternal()
         }
     }
 
     fun close() {
-        reconnectJob?.cancel()
-        connectionTimeoutJob?.cancel()
+        relayTransport.close()
         scope.cancel()
     }
 }

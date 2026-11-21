@@ -3,6 +3,8 @@ package com.example.securesmsforwarder.ui.dashboard
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -10,16 +12,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.securesmsforwarder.core.domain.SettingsManager
+import com.example.securesmsforwarder.p2p.ConnectionUiState
 import com.example.securesmsforwarder.storage.MessageEntity
 import com.example.securesmsforwarder.storage.MessageState
-import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SenderDashboardScreen(
-    connectionStatus: String,
+    connectionUiState: ConnectionUiState,
     queuedMessages: List<MessageEntity>,
     identityFingerprint: String,
     trustedDevicesCount: Int,
@@ -38,8 +42,7 @@ fun SenderDashboardScreen(
     onRetryFailedClick: () -> Unit = {}
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val isConnected = connectionStatus.startsWith("CONNECTED", ignoreCase = true)
-    
+
     Scaffold(
         bottomBar = {
             NavigationBar {
@@ -78,14 +81,14 @@ fun SenderDashboardScreen(
     ) { padding ->
         Box(modifier = Modifier.padding(padding).fillMaxSize()) {
             when (selectedTab) {
-                0 -> SenderMainTab(connectionStatus, onEstablishConnectionClick, onDisconnectClick, onSendTestMessageClick)
+                0 -> SenderMainTab(connectionUiState, onEstablishConnectionClick, onDisconnectClick, onSendTestMessageClick)
                 1 -> SenderQueueTab(queuedMessages, onClearMessagesClick, onRetryFailedClick)
-                2 -> ConnectionTab(connectionStatus, settingsManager)
+                2 -> ConnectionTab(connectionUiState, settingsManager)
                 3 -> SecurityTab(identityFingerprint, trustedDevicesCount, deviceName, onPairDeviceClick, onRemoveTrustClick)
                 4 -> SettingsTab(
                     settingsManager = settingsManager,
                     lastSyncedTimestamp = lastSyncedTimestamp,
-                    onResetRoleClick = onResetRoleClick, 
+                    onResetRoleClick = onResetRoleClick,
                     onSyncHistoryClick = onSyncHistoryClick,
                     onRequestBatteryOptimization = onRequestBatteryOptimization
                 )
@@ -96,56 +99,95 @@ fun SenderDashboardScreen(
 
 @Composable
 fun SenderMainTab(
-    connectionStatus: String, 
-    onConnect: () -> Unit, 
-    onDisconnect: () -> Unit, 
+    connectionUiState: ConnectionUiState,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit,
     onTest: () -> Unit
 ) {
+    val connectionStatus = connectionUiState.status
     val isConnected = connectionStatus.startsWith("CONNECTED", ignoreCase = true)
-    val isConnecting = connectionStatus.equals("CONNECTING", ignoreCase = true) || connectionStatus.equals("NEW", ignoreCase = true) || connectionStatus.equals("CHECKING", ignoreCase = true)
-    val isFailed = connectionStatus.equals("FAILED", ignoreCase = true) || connectionStatus.equals("DISCONNECTED", ignoreCase = true) || connectionStatus.equals("OFFLINE", ignoreCase = true)
+    val isPeerOffline = connectionStatus.contains("Peer Offline", ignoreCase = true)
+    val isConnecting = connectionStatus.equals("CONNECTING", ignoreCase = true) ||
+        connectionStatus.equals("NEW", ignoreCase = true) ||
+        connectionStatus.equals("CHECKING", ignoreCase = true)
+    val isFailed = connectionStatus.equals("FAILED", ignoreCase = true) ||
+        connectionStatus.equals("DISCONNECTED", ignoreCase = true) ||
+        connectionStatus.equals("OFFLINE", ignoreCase = true)
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         GlowingConnectionRing(isConnected = isConnected)
         Spacer(modifier = Modifier.height(32.dp))
-        
+
         Text(
             text = connectionStatus.uppercase(),
             style = MaterialTheme.typography.headlineMedium,
             color = when {
                 isConnected -> MaterialTheme.colorScheme.primary
+                isPeerOffline -> MaterialTheme.colorScheme.secondary
                 isFailed -> MaterialTheme.colorScheme.error
                 isConnecting -> MaterialTheme.colorScheme.secondary
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
+            },
+            textAlign = TextAlign.Center
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         if (isConnecting) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth(0.5f))
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Connecting to paired device...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else if (connectionStatus.contains("Peer Offline", ignoreCase = true)) {
-            Text("Relay is active. Paired device is offline or asleep; messages will be held securely in relay until it reconnects.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Text(
+                "Connecting to paired device...",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        } else if (isPeerOffline) {
+            Text(
+                "Relay is active. Paired device is offline or asleep; messages will be held securely in relay until it reconnects.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary,
+                textAlign = TextAlign.Center
+            )
         } else if (isFailed) {
-            Text("Disconnected. Paired device will auto-sync when online.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            Text(
+                "Disconnected. Paired device will auto-sync when online.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                textAlign = TextAlign.Center
+            )
         } else if (isConnected) {
-            val subText = if (connectionStatus.contains("Direct P2P", ignoreCase = true)) "Direct P2P • High Speed" else "End-to-End Encrypted Relay • Peer Online"
-            Text(subText, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "End-to-End Encrypted Relay • Peer Online",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
         }
-        
+
+        val lastError = connectionUiState.lastError
+        if (!lastError.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            ErrorDiagnosticBanner(
+                errorMessage = lastError,
+                modifier = Modifier.fillMaxWidth(0.9f)
+            )
+        }
+
         Spacer(modifier = Modifier.height(48.dp))
-        
+
         Column(
             modifier = Modifier.fillMaxWidth(0.9f),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            if (isConnected || isConnecting) {
+            if (isConnected || isConnecting || isPeerOffline) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -180,7 +222,7 @@ fun SenderMainTab(
             }
 
             Button(
-                onClick = onTest, 
+                onClick = onTest,
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
             ) {
@@ -224,7 +266,7 @@ fun SenderQueueTab(
             }
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(queuedMessages) { msg ->
+                items(queuedMessages, key = { it.messageId }) { msg ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -249,48 +291,81 @@ fun SenderQueueTab(
 }
 
 @Composable
-fun ConnectionTab(connectionStatus: String, settingsManager: SettingsManager) {
-    val isConnected = connectionStatus.startsWith("CONNECTED", ignoreCase = true)
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+fun ConnectionTab(connectionUiState: ConnectionUiState, settingsManager: SettingsManager) {
+    val isPaused by settingsManager.connectionPausedFlow.collectAsState()
+    val connectionStatus = connectionUiState.status
+    val isPausedState = isPaused || connectionUiState.isPaused || connectionStatus.equals("PAUSED", ignoreCase = true)
+    val isConnected = !isPausedState && (
+        connectionStatus.startsWith("CONNECTED", ignoreCase = true) ||
+            (connectionUiState.isRelayConnected && connectionUiState.isPeerOnline)
+        )
+    val isPeerOffline = !isPausedState && (
+        connectionStatus.contains("Peer Offline", ignoreCase = true) ||
+            (connectionUiState.isRelayConnected && !connectionUiState.isPeerOnline)
+        )
+    val isConnecting = !isPausedState && (
+        connectionStatus.equals("CONNECTING", ignoreCase = true) ||
+            connectionStatus.equals("NEW", ignoreCase = true) ||
+            connectionStatus.equals("CHECKING", ignoreCase = true)
+        )
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
         Text("Connection Metrics", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
                 val statusText = when {
-                    connectionStatus.contains("Direct P2P", ignoreCase = true) -> "Direct P2P Active"
-                    connectionStatus.contains("Encrypted Relay", ignoreCase = true) -> "Relay Active (Peer Online)"
-                    connectionStatus.contains("Peer Offline", ignoreCase = true) -> "Relay Ready (Peer Offline)"
-                    connectionStatus == "PAUSED" -> "Paused"
-                    else -> "Offline"
+                    isPausedState -> "Paused"
+                    isConnected -> "Relay Active (Peer Online)"
+                    isPeerOffline -> "Relay Standby (Peer Offline)"
+                    isConnecting -> "Connecting..."
+                    else -> "Disconnected"
                 }
                 val statusColor = when {
+                    isPausedState -> MaterialTheme.colorScheme.secondary
                     isConnected -> MaterialTheme.colorScheme.primary
-                    connectionStatus.contains("Peer Offline", ignoreCase = true) -> MaterialTheme.colorScheme.secondary
-                    connectionStatus == "PAUSED" -> MaterialTheme.colorScheme.secondary
+                    isPeerOffline || isConnecting -> MaterialTheme.colorScheme.secondary
                     else -> MaterialTheme.colorScheme.error
                 }
                 MetricRow("Status", statusText, statusColor)
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                val transportTier = when {
-                    connectionStatus.contains("Direct P2P", ignoreCase = true) -> "Tier 1 (Direct WebRTC DataChannel)"
-                    connectionStatus.contains("Encrypted Relay", ignoreCase = true) -> "Tier 2 (E2EE Firebase Relay)"
-                    connectionStatus.contains("Peer Offline", ignoreCase = true) -> "Tier 2 (Relay Queueing)"
-                    else -> "None"
+                val transportLayer = when {
+                    isPausedState -> "Paused"
+                    isConnected || isPeerOffline -> "Encrypted Relay (HTTPS/WSS)"
+                    isConnecting -> "Connecting..."
+                    else -> "Disconnected"
                 }
-                MetricRow("Transport Layer", transportTier, MaterialTheme.colorScheme.onSurface)
+                MetricRow("Transport Layer", transportLayer, MaterialTheme.colorScheme.onSurface)
                 HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                MetricRow("Encryption", if (isConnected || connectionStatus.contains("Peer Offline")) "Tink HPKE (X25519 + ChaCha20)" else "Disabled", MaterialTheme.colorScheme.onSurface)
+                MetricRow("Encryption", "Tink HPKE + Room AEAD", MaterialTheme.colorScheme.onSurface)
             }
         }
-        
+
+        val lastError = connectionUiState.lastError
+        if (!lastError.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(16.dp))
+            ErrorDiagnosticBanner(errorMessage = lastError)
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.padding(16.dp)) {
-                SettingToggle("Pause Connection (Save Battery)", settingsManager.isConnectionPaused) { settingsManager.isConnectionPaused = it }
+                SettingToggle("Pause Connection (Save Battery)", isPaused) {
+                    settingsManager.isConnectionPaused = it
+                }
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("When paused, WebRTC will disconnect and auto-reconnect will stop to save battery. Any incoming SMS will be queued and synced when you resume.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "When paused, the encrypted relay detaches to save battery. Any incoming SMS will remain encrypted in the local queue and sync automatically when you resume.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
@@ -439,6 +514,58 @@ fun SettingsTab(
 }
 
 @Composable
+fun ErrorDiagnosticBanner(
+    errorMessage: String,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = "Connection Error",
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Connection Error",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = errorMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+                if (errorMessage.contains("Permission denied", ignoreCase = true)) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Check Firebase Realtime Database security rules.",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun MetricRow(label: String, value: String, valueColor: Color) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -448,10 +575,10 @@ fun MetricRow(label: String, value: String, valueColor: Color) {
 
 @Composable
 fun SettingToggle(label: String, initialValue: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    var checked by remember { mutableStateOf(initialValue) }
+    var checked by remember(initialValue) { mutableStateOf(initialValue) }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text(label, style = MaterialTheme.typography.bodyLarge)
-        Switch(checked = checked, onCheckedChange = { 
+        Switch(checked = checked, onCheckedChange = {
             checked = it
             onCheckedChange(it)
         })

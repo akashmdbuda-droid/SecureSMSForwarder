@@ -85,7 +85,6 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
     
-    implementation(libs.webrtc)
     implementation(libs.tink.android)
     implementation(libs.coroutines.android)
     implementation(libs.navigation.compose)

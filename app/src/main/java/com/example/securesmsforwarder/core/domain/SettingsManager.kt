@@ -24,6 +24,7 @@ class SettingsManager(context: Context) {
         get() = prefs.getBoolean("dark_mode", true)
         set(value) {
             prefs.edit().putBoolean("dark_mode", value).apply()
+            forceDarkModeFlow.value = value
         }
 
     var isAutoStartEnabled: Boolean
@@ -31,13 +32,14 @@ class SettingsManager(context: Context) {
         set(value) = prefs.edit().putBoolean("auto_start", value).apply()
 
     var isNotificationsEnabled: Boolean
-        get() = prefs.getBoolean("notifications", false)
+        get() = prefs.getBoolean("notifications", true)
         set(value) = prefs.edit().putBoolean("notifications", value).apply()
 
     var isConnectionPaused: Boolean
         get() = prefs.getBoolean("connection_paused", false)
         set(value) {
             prefs.edit().putBoolean("connection_paused", value).apply()
+            connectionPausedFlow.value = value
         }
 
     var lastSeenVersionCode: Int

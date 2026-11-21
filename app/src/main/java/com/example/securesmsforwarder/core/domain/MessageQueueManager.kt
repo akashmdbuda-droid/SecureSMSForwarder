@@ -1,15 +1,17 @@
 package com.example.securesmsforwarder.core.domain
 
+import com.example.securesmsforwarder.crypto.storage.StorageCipher
 import com.example.securesmsforwarder.sms.ParsedSms
 import com.example.securesmsforwarder.storage.MessageDao
 import com.example.securesmsforwarder.storage.MessageEntity
 import com.example.securesmsforwarder.storage.MessageState
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import java.util.UUID
 
 class MessageQueueManager(
-    private val messageDao: MessageDao
+    private val messageDao: MessageDao,
+    private val storageCipher: StorageCipher
 ) {
     // In memory sequence number generator for V1, 
     // Ideally this should be persisted to survive reboots to guarantee strictly monotonic increments.
@@ -18,53 +20,54 @@ class MessageQueueManager(
     suspend fun enqueueMessage(parsedSms: ParsedSms) {
         val messageId = parsedSms.messageId ?: UUID.randomUUID().toString()
         val seqNum = synchronized(this) { currentSequenceNumber++ }
-        
-        val bodyBytes = parsedSms.body.toByteArray(Charsets.UTF_8)
-        val recent = messageDao.getRecentMessagesFromSender(parsedSms.sender, parsedSms.timestamp - 30000, parsedSms.timestamp + 30000)
-        if (recent.any { it.encryptedPayload.contentEquals(bodyBytes) }) {
+
+        val recent = messageDao.getRecentMessagesFromSender(
+            parsedSms.sender,
+            parsedSms.timestamp - 30_000L,
+            parsedSms.timestamp + 30_000L
+        )
+        if (recent.any { runCatching { storageCipher.decrypt(it.encryptedPayload) }.getOrNull() == parsedSms.body }) {
             return // Duplicate message (e.g. from both Receiver and Observer)
         }
-        
-        // 1. Initial creation (RECEIVED -> QUEUED locally)
-        // In Phase 1 we are saving the raw body as bytes. In Phase 2, this will be
-        // passed to the crypto layer BEFORE persisting, or persisted as QUEUED, then encrypted, then ENCRYPTED.
-        // For reliability (crash-safe delivery), we persist immediately as QUEUED.
-        
+
+        // Persist immediately as QUEUED with at-rest AEAD encryption for crash-safe delivery.
         val initialEntity = MessageEntity(
             messageId = messageId,
             sequenceNumber = seqNum,
             timestamp = parsedSms.timestamp,
             senderDeviceId = parsedSms.sender, // Sender is the originating phone number
-            encryptedPayload = parsedSms.body.toByteArray(Charsets.UTF_8), // TODO: Phase 2 Encrypt this
+            encryptedPayload = storageCipher.encrypt(parsedSms.body),
             state = MessageState.QUEUED
         )
-        
+
         messageDao.insertMessage(initialEntity)
-        
-        // 2. Trigger encryption (Phase 2)
-        // encryptMessage(messageId)
-        
-        // 3. Trigger transport (Phase 3/4)
-        // triggerTransport(messageId)
     }
 
     suspend fun enqueueTestMessage() {
         val messageId = UUID.randomUUID().toString()
         val seqNum = synchronized(this) { currentSequenceNumber++ }
-        
+
         val initialEntity = MessageEntity(
             messageId = messageId,
             sequenceNumber = seqNum,
             timestamp = System.currentTimeMillis(),
             senderDeviceId = "555-TEST",
-            encryptedPayload = "Hello from the Sender App UI!".toByteArray(Charsets.UTF_8),
+            encryptedPayload = storageCipher.encrypt("Hello from the Sender App UI!"),
             state = MessageState.QUEUED
         )
         messageDao.insertMessage(initialEntity)
     }
 
-    fun getPendingMessagesFlow(): kotlinx.coroutines.flow.Flow<List<MessageEntity>> {
+    fun getPendingMessagesFlow(): Flow<List<MessageEntity>> {
         return messageDao.getPendingMessages()
+    }
+
+    fun getSenderQueueMessagesFlow(): Flow<List<MessageEntity>> {
+        return messageDao.getSenderQueueMessages()
+    }
+
+    fun decryptBody(payload: ByteArray?): String {
+        return storageCipher.decrypt(payload)
     }
 
     suspend fun markTransmitting(messageId: String) {
@@ -94,7 +97,7 @@ class MessageQueueManager(
         return messageDao.requeueFailedMessages()
     }
 
-    fun getFailedMessagesCountFlow(): kotlinx.coroutines.flow.Flow<Int> {
+    fun getFailedMessagesCountFlow(): Flow<Int> {
         return messageDao.getFailedMessagesCount()
     }
 
@@ -114,7 +117,7 @@ class MessageQueueManager(
             timestamp = timestamp,
             senderDeviceId = sender,
             forwardingDevice = forwarder,
-            encryptedPayload = body.toByteArray(Charsets.UTF_8),
+            encryptedPayload = storageCipher.encrypt(body),
             state = MessageState.DELIVERED,
             retryCount = 0,
             nextRetryTime = 0L,
@@ -128,5 +131,3 @@ class MessageQueueManager(
         messageDao.deleteAll()
     }
 }
-
-

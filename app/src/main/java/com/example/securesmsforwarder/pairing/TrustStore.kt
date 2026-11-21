@@ -21,16 +21,25 @@ class TrustStore(context: Context) {
         private const val KEY_PEER_DEVICE_ID = "peer_device_id"
         private const val KEY_PEER_NAME = "peer_name"
         private const val KEY_PEER_LAST_SYNCED = "peer_last_synced"
+        private const val DEFAULT_PEER_NAME = "Paired Device"
     }
 
     /**
      * Saves the peer's public keyset and device ID after successful pairing.
      */
-    fun addTrustedPeer(deviceId: String, serializedPublicKeyset: String, name: String = "Paired Device") {
+    fun addTrustedPeer(deviceId: String, serializedPublicKeyset: String, name: String? = null) {
+        val existingDeviceId = prefs.getString(KEY_PEER_DEVICE_ID, null)
+        val existingName = prefs.getString(KEY_PEER_NAME, null)
+        val resolvedName = when {
+            !name.isNullOrBlank() && name != DEFAULT_PEER_NAME -> name
+            existingDeviceId == deviceId && !existingName.isNullOrBlank() -> existingName
+            !name.isNullOrBlank() -> name
+            else -> DEFAULT_PEER_NAME
+        }
         prefs.edit()
             .putString(KEY_PEER_DEVICE_ID, deviceId)
             .putString(KEY_PEER_PUBLIC_KEY, serializedPublicKeyset)
-            .putString(KEY_PEER_NAME, name)
+            .putString(KEY_PEER_NAME, resolvedName)
             .apply()
     }
 
@@ -56,7 +65,7 @@ class TrustStore(context: Context) {
     }
 
     fun getTrustedDeviceName(): String {
-        return prefs.getString(KEY_PEER_NAME, "Paired Device") ?: "Paired Device"
+        return prefs.getString(KEY_PEER_NAME, DEFAULT_PEER_NAME) ?: DEFAULT_PEER_NAME
     }
 
     fun setTrustedDeviceName(name: String) {

@@ -27,6 +27,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages WHERE state IN ('QUEUED', 'ENCRYPTED', 'TRANSMITTING', 'PERSISTED_BY_B') ORDER BY sequenceNumber ASC")
     fun getPendingMessages(): Flow<List<MessageEntity>>
 
+    @Query("SELECT * FROM messages WHERE state IN ('QUEUED', 'ENCRYPTED', 'TRANSMITTING', 'PERSISTED_BY_B', 'FAILED') ORDER BY sequenceNumber ASC")
+    fun getSenderQueueMessages(): Flow<List<MessageEntity>>
+
     @Query("UPDATE messages SET state = :newState WHERE messageId = :id")
     suspend fun updateMessageState(id: String, newState: MessageState)
 
