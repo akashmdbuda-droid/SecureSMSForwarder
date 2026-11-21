@@ -1,0 +1,6 @@
+# Keep the knowledge graph focused on SecureSMSForwarder code, docs, and OpenSpec specs
+.agents/skills/
+public/
+*.keystore
+*.b64
+*.apk

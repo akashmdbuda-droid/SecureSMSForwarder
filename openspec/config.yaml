@@ -1,0 +1,51 @@
+schema: spec-driven
+
+context: |
+  SecureSMSForwarder is a two-device Android (Kotlin + Jetpack Compose) SMS forwarding app
+  with two roles (SENDER and VIEWER), End-to-End Encryption (Google Tink HPKE:
+  DHKEM_X25519_HKDF_SHA256_HKDF_SHA256_CHACHA20_POLY1305), Room local persistence,
+  and a dual-tier transport architecture:
+    - Tier 1: Direct WebRTC DataChannel (STUN + Metered.ca UDP/TCP/TLS TURN, Trickle ICE)
+    - Tier 2: E2EE Fallback Relay over Firebase Realtime Database with presence heartbeats
+
+  Key constraints:
+  - Min SDK 26, Target/Compile SDK 36, Java 11 bytecode target, Gradle Kotlin DSL.
+  - Zero plaintext on wire or in Firebase Realtime Database: all SMS, ACK, and WIPE payloads
+    MUST be Tink HPKE-encrypted to the paired peer's public keyset before transmission.
+  - Android 14+ foreground service uses remoteMessaging|dataSync types.
+  - Versioning & releases are strictly governed by .agents/AGENTS.md and docs/VERSIONING.md:
+    bump versionCode & versionName in app/build.gradle.kts, keep MainActivity.kt welcome toast
+    and Changelog.kt synchronized, update docs/VERSIONING.md & docs/PROJECT_CONTEXT.md,
+    run `graphify update .`, commit, tag `v<versionName>`, and push to trigger release.yml.
+  - Consult graphify-out/ (via `graphify query` / `explain` / `path`) before broad code searches.
+  - Follow Superpowers methodology (.agents/skills/): brainstorm/clarify -> spec -> plan ->
+    TDD implement -> verify before completion -> archive -> release.
+
+rules:
+  proposal:
+    - Clearly state problem statement, scope, non-goals, and affected capabilities.
+    - Reference diagnosed root causes with exact file paths and symbols.
+    - Specify target release version impact (patch/minor) per docs/VERSIONING.md.
+  specs:
+    - Use RFC 2119 keywords (SHALL, MUST, SHOULD) and concrete WHEN/THEN scenarios.
+    - Preserve existing requirements when using MODIFIED deltas.
+    - Explicitly cover failure modes, offline/Doze recovery, and security/encryption invariants.
+  design:
+    - Include thread/coroutine safety, lifecycle cleanup, and Android API 26-36 compatibility.
+    - Note any Room schema migration or SharedPreferences compatibility impact.
+  tasks:
+    - Break work into small, testable TDD tasks (write failing unit test -> implement -> verify).
+    - Include final tasks for updating docs/PROJECT_CONTEXT.md, docs/VERSIONING.md,
+      running `graphify update .`, and executing the release process once verified.
+
+operations:
+  apply:
+    guidance:
+      - Follow Superpowers test-driven-development and systematic-debugging skills.
+      - Verify changes with unit tests (`./gradlew testDebugUnitTest` or CI verification) before marking complete.
+      - Run `graphify update .` after code changes so graphify-out/ stays synchronized.
+  archive:
+    guidance:
+      - Sync all delta specs into openspec/specs/ and validate with `openspec validate --specs`.
+      - Record the archived change and corresponding release tag in docs/VERSIONING.md.
+      - Update docs/PROJECT_CONTEXT.md if architecture, state machines, or known issues changed.
