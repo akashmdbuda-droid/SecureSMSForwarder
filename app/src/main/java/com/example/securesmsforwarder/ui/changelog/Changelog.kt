@@ -17,6 +17,18 @@ data class ReleaseNote(
 
 val Changelog = listOf(
     ReleaseNote(
+        version = "v1.1.0",
+        date = "2026-11-21",
+        changes = listOf(
+            "Pure 100% End-to-End Encrypted Firebase Relay (HTTPS/WSS port 443): removed WebRTC, STUN, and public Metered.ca TURN servers for lower battery drain, stronger privacy, and rock-solid connectivity",
+            "Zero re-pairing required: existing device identity keys and paired devices remain seamlessly active across the upgrade",
+            "Fixed Connect button reliability: singleton AppContainer prevents preference listener eviction, reactive ConnectionUiState stays synced across service restarts, and tapping Connect always unpauses and starts the forwarding service",
+            "Security hardening: encrypted local SMS storage at rest with Android Keystore Tink AEAD (backward-compatible with existing messages), disabled Android cloud backups, and rejected legacy non-JSON wire payloads",
+            "Added visible Firebase/transport error diagnostics on dashboards, multi-network-safe Wi-Fi <-> Cellular handoffs, Mutex-serialized queue draining, and complete listener cleanup on restart/unpair",
+            "Fixed Sender Queue visibility for FAILED messages (Retry button), Sender relay-standby Disconnect/Reconnect controls, side-effect-safe Viewer read receipts, and Notifications preference enforcement"
+        )
+    ),
+    ReleaseNote(
         version = "v1.0.23",
         date = "2026-09-21",
         changes = listOf(

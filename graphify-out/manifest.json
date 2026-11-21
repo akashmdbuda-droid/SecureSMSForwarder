@@ -1,476 +1,500 @@
 {
   ".github/workflows/release.yml": {
-    "mtime": 1795257473.5002637,
-    "seen": 1795257941.5604732,
+    "mtime": 1795260921.1076849,
+    "seen": 1795263036.0189757,
     "ast_hash": "b95a7fe2209cdffd0453981e2de0d252",
     "semantic_hash": ""
   },
   "app/build.gradle.kts": {
-    "mtime": 1795257473.5022638,
-    "seen": 1795257941.560474,
-    "ast_hash": "acf73d15436d83f1fa2ecba3ab8a43a1",
+    "mtime": 1795262957.5382733,
+    "seen": 1795263036.018978,
+    "ast_hash": "c063c716c0a5ae27c6e4668dc7a7e39c",
     "semantic_hash": ""
   },
   "app/google-services.json": {
-    "mtime": 1795257473.5022638,
-    "seen": 1795257941.5604746,
+    "mtime": 1795260921.1076849,
+    "seen": 1795263036.01898,
     "ast_hash": "b46d927f31f989bc0932db9cf71c94b3",
     "semantic_hash": ""
   },
   "app/src/androidTest/java/com/example/securesmsforwarder/ExampleInstrumentedTest.kt": {
-    "mtime": 1795257473.5042636,
-    "seen": 1795257941.560475,
+    "mtime": 1795260921.1076849,
+    "seen": 1795263036.0189817,
     "ast_hash": "36bdde2636c65d3151db14026308ee17",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/MainActivity.kt": {
-    "mtime": 1795257473.5052638,
-    "seen": 1795257941.5604758,
-    "ast_hash": "ffa280219c52d209bf3d4f6d844e3124",
+    "mtime": 1795262394.4973865,
+    "seen": 1795263036.0189846,
+    "ast_hash": "96e4c12f575e73041bb321adee27fef0",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/background/BootReceiver.kt": {
-    "mtime": 1795257473.5052638,
-    "seen": 1795257941.5604768,
-    "ast_hash": "1c191b7884137679e0959147f9741e4e",
+    "mtime": 1795262323.3924007,
+    "seen": 1795263036.0189881,
+    "ast_hash": "97a15fcb6e75946945ce2502b8c4cea6",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/background/ForwardingService.kt": {
-    "mtime": 1795257473.5052638,
-    "seen": 1795257941.5604775,
-    "ast_hash": "65bbc8c97b4902b27f543bd052483edb",
+    "mtime": 1795262399.7133853,
+    "seen": 1795263036.0189893,
+    "ast_hash": "4f00f6d8e47deba60bc0aae4add47b45",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/core/domain/MessageQueueManager.kt": {
-    "mtime": 1795257473.5062637,
-    "seen": 1795257941.5604782,
-    "ast_hash": "9da642243daecfc2da69659f79edb8ca",
+    "mtime": 1795261683.7095299,
+    "seen": 1795263036.0189903,
+    "ast_hash": "b0a8a2bfc75c67cde1bda753e21c511e",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/core/domain/RoleManager.kt": {
-    "mtime": 1795257473.5062637,
-    "seen": 1795257941.560479,
+    "mtime": 1795260921.1076849,
+    "seen": 1795263036.0189917,
     "ast_hash": "7b140b6c50e284d8ab042394632decd1",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/core/domain/SettingsManager.kt": {
-    "mtime": 1795257473.5062637,
-    "seen": 1795257941.5604796,
-    "ast_hash": "101ff7e986b890c7d22d925a3f57aa7f",
+    "mtime": 1795261691.2635283,
+    "seen": 1795263036.0189927,
+    "ast_hash": "bbe14950c4f77b6d149845bb285b3312",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/core/util/BiometricHelper.kt": {
-    "mtime": 1795257473.5062637,
-    "seen": 1795257941.5604806,
+    "mtime": 1795260921.1076849,
+    "seen": 1795263036.0189939,
     "ast_hash": "18f40661abfe37ed0ddf1a432db2d146",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/crypto/encryption/MessageEncryption.kt": {
-    "mtime": 1795257473.5072637,
-    "seen": 1795257941.5604813,
+    "mtime": 1795260921.1076849,
+    "seen": 1795263036.0189953,
     "ast_hash": "6d52be057388e634623b5b6dcd84159c",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/crypto/identity/KeyManager.kt": {
-    "mtime": 1795257473.5072637,
-    "seen": 1795257941.5604818,
+    "mtime": 1795260921.1076849,
+    "seen": 1795263036.0189962,
     "ast_hash": "5ad1ef3d2b2c6d46eaea35f3d764f06f",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/p2p/TransportManager.kt": {
-    "mtime": 1795257473.5072637,
-    "seen": 1795257941.5604825,
-    "ast_hash": "3ae3fa5556f38ee95b278f095df2d306",
-    "semantic_hash": ""
-  },
-  "app/src/main/java/com/example/securesmsforwarder/p2p/signaling/FirebaseSignalingProvider.kt": {
-    "mtime": 1795257473.5072637,
-    "seen": 1795257941.5604832,
-    "ast_hash": "1adb6f19d5ceb8cf41aea5f635764291",
-    "semantic_hash": ""
-  },
-  "app/src/main/java/com/example/securesmsforwarder/p2p/signaling/ManualSignalingProvider.kt": {
-    "mtime": 1795257473.5072637,
-    "seen": 1795257941.5604842,
-    "ast_hash": "65c6e5f69a8bbf481bd3f65cbd4468a8",
-    "semantic_hash": ""
-  },
-  "app/src/main/java/com/example/securesmsforwarder/p2p/signaling/SignalingEnvelope.kt": {
-    "mtime": 1795257473.5072637,
-    "seen": 1795257941.5604846,
-    "ast_hash": "87d932d37085b72a7b2f14e5c7c154bf",
-    "semantic_hash": ""
-  },
-  "app/src/main/java/com/example/securesmsforwarder/p2p/signaling/SignalingProvider.kt": {
-    "mtime": 1795257473.5072637,
-    "seen": 1795257941.5604854,
-    "ast_hash": "b6f723f406bf3578d9f0145516e3f569",
-    "semantic_hash": ""
-  },
-  "app/src/main/java/com/example/securesmsforwarder/p2p/webrtc/WebRtcDirectTransport.kt": {
-    "mtime": 1795257473.5072637,
-    "seen": 1795257941.560486,
-    "ast_hash": "f439b63b9df9d1d15c8616d71c4f2391",
+    "mtime": 1795261923.938481,
+    "seen": 1795263036.0189993,
+    "ast_hash": "b093a442a9da5bcf55d00f381008fe2c",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/pairing/TrustStore.kt": {
-    "mtime": 1795257473.5082638,
-    "seen": 1795257941.5604866,
-    "ast_hash": "9c919f8266b3dee7666cfa21eaad1f97",
+    "mtime": 1795261687.612529,
+    "seen": 1795263036.019003,
+    "ast_hash": "4302d818ea2fc11ce22b3df3af3049df",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/sms/SmsHistoryScanner.kt": {
-    "mtime": 1795257473.5082638,
-    "seen": 1795257941.5604875,
-    "ast_hash": "6a84ddeae72140ddd6a69b72d0fbd2ed",
+    "mtime": 1795262399.3803854,
+    "seen": 1795263036.019004,
+    "ast_hash": "66cca33732bdd6907e77575a91c8cbc6",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/sms/SmsObserver.kt": {
-    "mtime": 1795257473.5082638,
-    "seen": 1795257941.5604882,
-    "ast_hash": "2c72c56eaf4f448b26da61a3fa20066c",
+    "mtime": 1795262361.304393,
+    "seen": 1795263036.0190055,
+    "ast_hash": "1fc99b7d3eff5f14f4c4feb40ac90f46",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/sms/SmsParser.kt": {
-    "mtime": 1795257473.5082638,
-    "seen": 1795257941.560489,
+    "mtime": 1795260921.1086848,
+    "seen": 1795263036.0190067,
     "ast_hash": "1e88f2a8db9030ce2264e71d440d0c9d",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/sms/SmsReceiver.kt": {
-    "mtime": 1795257473.5082638,
-    "seen": 1795257941.5604894,
-    "ast_hash": "56d912c6b6652f5a7540b97131acff5e",
+    "mtime": 1795262352.021395,
+    "seen": 1795263036.0190077,
+    "ast_hash": "7993cb127ffa07e92e27dcc5b9a83362",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/storage/AppDatabase.kt": {
-    "mtime": 1795257473.5082638,
-    "seen": 1795257941.5604901,
+    "mtime": 1795260921.1086848,
+    "seen": 1795263036.0190089,
     "ast_hash": "d7ba69946783a68457223ef6e416c010",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/storage/MessageDao.kt": {
-    "mtime": 1795257473.5082638,
-    "seen": 1795257941.560491,
-    "ast_hash": "9039d111e7c437046d0846d5ec277a29",
+    "mtime": 1795261676.2985315,
+    "seen": 1795263036.0190103,
+    "ast_hash": "4c3868551cf4e077135fc959e12b8cd0",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/storage/MessageEntity.kt": {
-    "mtime": 1795257473.5082638,
-    "seen": 1795257941.5604918,
+    "mtime": 1795260921.1086848,
+    "seen": 1795263036.0190115,
     "ast_hash": "3502a83c4c5686d0a69a8527f3b02c57",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/ui/changelog/Changelog.kt": {
-    "mtime": 1795257473.5092638,
-    "seen": 1795257941.5604923,
-    "ast_hash": "3dd84b1b966c380ac6ed44a24aed4f2f",
+    "mtime": 1795262962.2092724,
+    "seen": 1795263036.0190127,
+    "ast_hash": "0b39845620160f11d2133c670aeb1f1c",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/ui/dashboard/SenderDashboardScreen.kt": {
-    "mtime": 1795257473.5102637,
-    "seen": 1795257941.560493,
-    "ast_hash": "9b2cdb67044742a5ca0e82793464304c",
+    "mtime": 1795262500.0603652,
+    "seen": 1795263036.019014,
+    "ast_hash": "3ddcf263d806de75d6a9317ebfc6bba2",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/ui/dashboard/SharedComponents.kt": {
-    "mtime": 1795257473.5102637,
-    "seen": 1795257941.5604935,
+    "mtime": 1795260921.109685,
+    "seen": 1795263036.0190153,
     "ast_hash": "9bd307d557727167f7dfdd6576752fa8",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/ui/dashboard/ViewerDashboardScreen.kt": {
-    "mtime": 1795257473.5102637,
-    "seen": 1795257941.560498,
-    "ast_hash": "b0b0d342f1b8c1abb50f67975b287e85",
+    "mtime": 1795262482.7983687,
+    "seen": 1795263036.0190165,
+    "ast_hash": "18f980dff055086ebc4b6cdd7fb9e263",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/ui/pairing/CustomScannerActivity.kt": {
-    "mtime": 1795257473.5102637,
-    "seen": 1795257941.5604987,
+    "mtime": 1795260921.109685,
+    "seen": 1795263036.0190175,
     "ast_hash": "57cccc085f647d513971d7bfa8cf2cb4",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/ui/pairing/QrPairingScreen.kt": {
-    "mtime": 1795257473.5102637,
-    "seen": 1795257941.5604994,
+    "mtime": 1795260921.109685,
+    "seen": 1795263036.0190184,
     "ast_hash": "86b3d568e570a63fc3db60bf357586ef",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/ui/setup/SetupScreen.kt": {
-    "mtime": 1795257473.5112638,
-    "seen": 1795257941.5605001,
+    "mtime": 1795260921.109685,
+    "seen": 1795263036.0190198,
     "ast_hash": "1c4aff347f91063a2d3c60f656d12d2d",
     "semantic_hash": ""
   },
-  "app/src/main/java/com/example/securesmsforwarder/ui/signaling/SignalingScreen.kt": {
-    "mtime": 1795257473.5112638,
-    "seen": 1795257941.5605006,
-    "ast_hash": "6983a28c669965b6de79be38a96de3e5",
-    "semantic_hash": ""
-  },
   "app/src/main/java/com/example/securesmsforwarder/ui/theme/Color.kt": {
-    "mtime": 1795257473.5112638,
-    "seen": 1795257941.5605016,
+    "mtime": 1795260921.109685,
+    "seen": 1795263036.0190208,
     "ast_hash": "8f59e374668099239dff7ac027322389",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/ui/theme/Theme.kt": {
-    "mtime": 1795257473.5112638,
-    "seen": 1795257941.5605023,
+    "mtime": 1795260921.109685,
+    "seen": 1795263036.0190217,
     "ast_hash": "53ae9ba4269400899ccc3feaedaeb3ad",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/ui/theme/Type.kt": {
-    "mtime": 1795257473.5112638,
-    "seen": 1795257941.560503,
+    "mtime": 1795260921.109685,
+    "seen": 1795263036.019023,
     "ast_hash": "9555a4dbc4b94d7e5a9e38a82daad247",
     "semantic_hash": ""
   },
   "app/src/main/java/com/example/securesmsforwarder/updater/AppUpdater.kt": {
-    "mtime": 1795257473.5122638,
-    "seen": 1795257941.5605035,
+    "mtime": 1795260921.109685,
+    "seen": 1795263036.019024,
     "ast_hash": "d3000503642569320e4db7fab49d1626",
     "semantic_hash": ""
   },
   "app/src/test/java/com/example/securesmsforwarder/ExampleUnitTest.kt": {
-    "mtime": 1795257473.5182638,
-    "seen": 1795257941.5605044,
+    "mtime": 1795260921.1146848,
+    "seen": 1795263036.019025,
     "ast_hash": "0215a6862caf2e405649b7b459b9b40c",
     "semantic_hash": ""
   },
   "app/src/test/java/com/example/securesmsforwarder/core/domain/MessageQueueManagerTest.kt": {
-    "mtime": 1795257473.5182638,
-    "seen": 1795257941.560505,
-    "ast_hash": "724b8917036799af95c559ac43430686",
+    "mtime": 1795261641.3835385,
+    "seen": 1795263036.0190265,
+    "ast_hash": "5959a38c8f3ffa1d29ea1f88aab2cc5f",
     "semantic_hash": ""
   },
   "app/src/test/java/com/example/securesmsforwarder/crypto/encryption/MessageEncryptionFuzzTest.kt": {
-    "mtime": 1795257473.5182638,
-    "seen": 1795257941.5605056,
+    "mtime": 1795260921.1146848,
+    "seen": 1795263036.0190275,
     "ast_hash": "9bee16c65fb47d6ed47d7a7cdb51fb0d",
     "semantic_hash": ""
   },
   "app/src/test/java/com/example/securesmsforwarder/sms/SmsParserTest.kt": {
-    "mtime": 1795257473.5182638,
-    "seen": 1795257941.5605063,
+    "mtime": 1795260921.1146848,
+    "seen": 1795263036.0190318,
     "ast_hash": "c6300205273a9a284a0f5c4fd478d112",
     "semantic_hash": ""
   },
   "build.gradle.kts": {
-    "mtime": 1795257473.5182638,
-    "seen": 1795257941.5605068,
+    "mtime": 1795260921.1146848,
+    "seen": 1795263036.0190332,
     "ast_hash": "0c1875bdd34e9e3cbf5dfb9021a039cc",
     "semantic_hash": ""
   },
   "gradlew": {
-    "mtime": 1795257473.5192637,
-    "seen": 1795257941.5605075,
+    "mtime": 1795260921.1156847,
+    "seen": 1795263036.0190344,
     "ast_hash": "266606e78242737ef3da02a80ea0564d",
     "semantic_hash": ""
   },
   "openspec/config.yaml": {
-    "mtime": 1795257795.0222635,
-    "seen": 1795257941.5605092,
-    "ast_hash": "5063a6f5983f59c6b91a3b314b3d2e41",
+    "mtime": 1795262987.1782675,
+    "seen": 1795263036.0190368,
+    "ast_hash": "8aba9c4b0313a98863b1873726b5b485",
     "semantic_hash": ""
   },
   "settings.gradle.kts": {
-    "mtime": 1795257473.9572637,
-    "seen": 1795257941.5605104,
+    "mtime": 1795260921.5136847,
+    "seen": 1795263036.019038,
     "ast_hash": "4ef66b92f1de4acc4e6ccbf1c40ebcda",
     "semantic_hash": ""
   },
   ".agents/AGENTS.md": {
-    "mtime": 1795260322.5078235,
-    "seen": 1795260333.4150352,
+    "mtime": 1795260921.0986848,
+    "seen": 1795263036.019039,
     "ast_hash": "f63d41a1ac48e34e58373a0d03990a66",
     "semantic_hash": ""
   },
   ".agents/rules/superpowers-workflow.md": {
-    "mtime": 1795257856.2862637,
-    "seen": 1795257941.560512,
+    "mtime": 1795260921.0986848,
+    "seen": 1795263036.01904,
     "ast_hash": "2472aca0342069b0b641bd405b81b0ed",
     "semantic_hash": ""
   },
   ".agents/workflows/feature-lifecycle.md": {
-    "mtime": 1795257856.4282637,
-    "seen": 1795257941.5605695,
+    "mtime": 1795260921.1056848,
+    "seen": 1795263036.0190413,
     "ast_hash": "bbc9b82b406ed84aeebffd2073591169",
     "semantic_hash": ""
   },
   "docs/PROJECT_CONTEXT.md": {
-    "mtime": 1795260319.8298235,
-    "seen": 1795260333.4150405,
-    "ast_hash": "58336bb2702e8bff56b90446e23872b7",
+    "mtime": 1795262999.9642649,
+    "seen": 1795263036.0190446,
+    "ast_hash": "1448b8adbed9e52e476956f412eb0e78",
     "semantic_hash": ""
   },
   "docs/VERSIONING.md": {
-    "mtime": 1795257806.8022635,
-    "seen": 1795257941.5605712,
-    "ast_hash": "f93c72fa0e7d2cd2310364fedeaf5c27",
+    "mtime": 1795263012.7972622,
+    "seen": 1795263036.0190458,
+    "ast_hash": "815538aaaeaab91eb4ae62f278592178",
     "semantic_hash": ""
   },
   "openspec/specs/crypto-and-pairing/spec.md": {
-    "mtime": 1795257830.8032637,
-    "seen": 1795257941.560579,
-    "ast_hash": "a942698fd8b8ce1c3e436e1f0a8c1fdb",
+    "mtime": 1795262923.6412802,
+    "seen": 1795263036.0190556,
+    "ast_hash": "8d9b2483c6c6bce8cac5c4f5c3b86a50",
     "semantic_hash": ""
   },
   "openspec/specs/sms-capture-and-queue/spec.md": {
-    "mtime": 1795257827.6762636,
-    "seen": 1795257941.5605795,
-    "ast_hash": "47ff237c89de704632aa55d6e5ea42ea",
+    "mtime": 1795262918.3292813,
+    "seen": 1795263036.0190566,
+    "ast_hash": "259dbc8a95b784ffb17388a16c6b0108",
     "semantic_hash": ""
   },
   "openspec/specs/transport-and-relay/spec.md": {
-    "mtime": 1795257823.3582635,
-    "seen": 1795257941.5605803,
-    "ast_hash": "e3d961b7201badd4933bc3506746aacd",
+    "mtime": 1795262913.7782822,
+    "seen": 1795263036.0190578,
+    "ast_hash": "b8a476803a5491b45e1770ef4b664c99",
     "semantic_hash": ""
   },
   "openspec/specs/ui-dashboards/spec.md": {
-    "mtime": 1795257833.4662635,
-    "seen": 1795257941.5605812,
-    "ast_hash": "ce7d246309993ee5bf54266ee7d4a676",
+    "mtime": 1795262926.7812796,
+    "seen": 1795263036.0190587,
+    "ast_hash": "b28822a3ae838dd9034db3fe7566980b",
     "semantic_hash": ""
   },
   "openspec/specs/versioning-and-updater/spec.md": {
-    "mtime": 1795257833.6322637,
-    "seen": 1795257941.5605817,
-    "ast_hash": "a9850fb7ae2765584a1d896f7e4ed4ac",
+    "mtime": 1795262927.0602796,
+    "seen": 1795263036.01906,
+    "ast_hash": "38e00523db82cfd1dbcdcc0c67f06f06",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-hdpi/ic_launcher.webp": {
-    "mtime": 1795257473.5132637,
-    "seen": 1795257941.5605824,
+    "mtime": 1795260921.109685,
+    "seen": 1795263036.0190613,
     "ast_hash": "39d9bb21eb48f128a71c3f01ad3cd427",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-hdpi/ic_launcher_round.webp": {
-    "mtime": 1795257473.5132637,
-    "seen": 1795257941.560583,
+    "mtime": 1795260921.1106849,
+    "seen": 1795263036.0190623,
     "ast_hash": "70d6f58af3c76ee221c829b1ce9daa04",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-mdpi/ic_launcher.webp": {
-    "mtime": 1795257473.5132637,
-    "seen": 1795257941.5605838,
+    "mtime": 1795260921.1106849,
+    "seen": 1795263036.0190635,
     "ast_hash": "d2acce71c7b46e5e9540d23a9f7b2166",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-mdpi/ic_launcher_round.webp": {
-    "mtime": 1795257473.5132637,
-    "seen": 1795257941.5605848,
+    "mtime": 1795260921.1106849,
+    "seen": 1795263036.0190647,
     "ast_hash": "6376acb48f96a855ee95c113cd7fd616",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xhdpi/ic_launcher.webp": {
-    "mtime": 1795257473.5132637,
-    "seen": 1795257941.5605855,
+    "mtime": 1795260921.1106849,
+    "seen": 1795263036.0190656,
     "ast_hash": "bd087d80b70bec05a43c745f29dc3ffc",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp": {
-    "mtime": 1795257473.5132637,
-    "seen": 1795257941.560586,
+    "mtime": 1795260921.1106849,
+    "seen": 1795263036.0190666,
     "ast_hash": "7479edd56ab712609f030054bffd7263",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xxhdpi/ic_launcher.webp": {
-    "mtime": 1795257473.5142636,
-    "seen": 1795257941.5605867,
+    "mtime": 1795260921.1106849,
+    "seen": 1795263036.0190673,
     "ast_hash": "ea180e8d1a2e8300cc998b987266b736",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp": {
-    "mtime": 1795257473.5142636,
-    "seen": 1795257941.5605874,
+    "mtime": 1795260921.1106849,
+    "seen": 1795263036.0190687,
     "ast_hash": "947842742b29eeda80ee0805e1600366",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xxhdpi/secure_sms_icon.png": {
-    "mtime": 1795257473.5162637,
-    "seen": 1795257941.5605881,
+    "mtime": 1795260921.1146848,
+    "seen": 1795263036.0190697,
     "ast_hash": "734c3f6c830aaba4c291757de685ea9c",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp": {
-    "mtime": 1795257473.5162637,
-    "seen": 1795257941.5605888,
+    "mtime": 1795260921.1146848,
+    "seen": 1795263036.0190706,
     "ast_hash": "54ab624970c86c2146e76b93f27586f7",
     "semantic_hash": ""
   },
   "app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp": {
-    "mtime": 1795257473.5162637,
-    "seen": 1795257941.5605896,
+    "mtime": 1795260921.1146848,
+    "seen": 1795263036.019072,
     "ast_hash": "9ee591be72fb336861a8044086054daa",
     "semantic_hash": ""
   },
-  "openspec/changes/rebuild-e2ee-relay-core/.openspec.yaml": {
-    "mtime": 1795260139.8678231,
-    "seen": 1795260333.4150314,
-    "ast_hash": "6a2bf275d80e0a3bd99e527ccc246e1f",
-    "semantic_hash": ""
-  },
   "AGENTS.md": {
-    "mtime": 1795260322.8968234,
-    "seen": 1795260333.4150383,
+    "mtime": 1795260921.1076849,
+    "seen": 1795263036.0190423,
     "ast_hash": "d78973534170eaba82314f94d2fc5899",
     "semantic_hash": ""
   },
   "docs/HANDOFF.md": {
-    "mtime": 1795260309.4808233,
-    "seen": 1795260333.4150395,
-    "ast_hash": "8408f3351526a00f3adfbce12969630c",
+    "mtime": 1795263013.193262,
+    "seen": 1795263036.0190437,
+    "ast_hash": "36dd7fbe38586220d71b7a17aa11a4b1",
     "semantic_hash": ""
   },
-  "openspec/changes/rebuild-e2ee-relay-core/design.md": {
-    "mtime": 1795260251.4048233,
-    "seen": 1795260333.4150424,
+  ".github/workflows/ci.yml": {
+    "mtime": 1795262394.1073864,
+    "seen": 1795263036.0189695,
+    "ast_hash": "4d24b56fac8f2b75f1fca74231944e78",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/example/securesmsforwarder/AppContainer.kt": {
+    "mtime": 1795261693.0725281,
+    "seen": 1795263036.018983,
+    "ast_hash": "a8bee4d036610d07c14cbf7c9ce3174d",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/example/securesmsforwarder/SecureSmsApplication.kt": {
+    "mtime": 1795261693.239528,
+    "seen": 1795263036.018986,
+    "ast_hash": "457a22ceda6fa54bbdf0f73d8c41518b",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/example/securesmsforwarder/crypto/storage/LocalStorageCipher.kt": {
+    "mtime": 1795261658.369535,
+    "seen": 1795263036.018997,
+    "ast_hash": "c0e85fde214cf6cdda338c94a73dd0ba",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/example/securesmsforwarder/p2p/ConnectionUiState.kt": {
+    "mtime": 1795261722.584522,
+    "seen": 1795263036.0189984,
+    "ast_hash": "c662b3c000fab256057f4f1c0b6ebcb4",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/example/securesmsforwarder/p2p/relay/FirebaseRelayTransport.kt": {
+    "mtime": 1795261769.4875126,
+    "seen": 1795263036.0190005,
+    "ast_hash": "240e5c29d55417552c0c65c822c76bb0",
+    "semantic_hash": ""
+  },
+  "app/src/main/java/com/example/securesmsforwarder/p2p/relay/RelayTransport.kt": {
+    "mtime": 1795261746.5955172,
+    "seen": 1795263036.0190012,
+    "ast_hash": "1d9f2d882d922f07fa4a454f601fde61",
+    "semantic_hash": ""
+  },
+  "app/src/test/java/com/example/securesmsforwarder/crypto/storage/LocalStorageCipherTest.kt": {
+    "mtime": 1795261627.8205414,
+    "seen": 1795263036.0190284,
+    "ast_hash": "da2d999dccaa4946acc3059b5eccfaf5",
+    "semantic_hash": ""
+  },
+  "app/src/test/java/com/example/securesmsforwarder/p2p/TransportManagerTest.kt": {
+    "mtime": 1795261936.8024786,
+    "seen": 1795263036.0190296,
+    "ast_hash": "109df0ec31c722f35fb6823fa1175be6",
+    "semantic_hash": ""
+  },
+  "app/src/test/java/com/example/securesmsforwarder/pairing/TrustStoreTest.kt": {
+    "mtime": 1795261641.8585384,
+    "seen": 1795263036.0190306,
+    "ast_hash": "da33744ffcf030eba533542d0f5f9551",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-11-21-rebuild-e2ee-relay-core/.openspec.yaml": {
+    "mtime": 1795260921.1336849,
+    "seen": 1795263036.0190356,
+    "ast_hash": "6a2bf275d80e0a3bd99e527ccc246e1f",
+    "semantic_hash": ""
+  },
+  "openspec/changes/archive/2026-11-21-rebuild-e2ee-relay-core/design.md": {
+    "mtime": 1795260921.1346848,
+    "seen": 1795263036.019047,
     "ast_hash": "941083a660a1999494ff3a712b84f84f",
     "semantic_hash": ""
   },
-  "openspec/changes/rebuild-e2ee-relay-core/proposal.md": {
-    "mtime": 1795260175.5188231,
-    "seen": 1795260333.415043,
+  "openspec/changes/archive/2026-11-21-rebuild-e2ee-relay-core/proposal.md": {
+    "mtime": 1795260921.1346848,
+    "seen": 1795263036.019048,
     "ast_hash": "b0b3e1681e8361f736dce103dacbbf69",
     "semantic_hash": ""
   },
-  "openspec/changes/rebuild-e2ee-relay-core/specs/crypto-and-pairing/spec.md": {
-    "mtime": 1795260188.5508232,
-    "seen": 1795260333.4150438,
+  "openspec/changes/archive/2026-11-21-rebuild-e2ee-relay-core/specs/crypto-and-pairing/spec.md": {
+    "mtime": 1795260921.1346848,
+    "seen": 1795263036.0190492,
     "ast_hash": "1f7a1c547bf91229468a85977ee2eace",
     "semantic_hash": ""
   },
-  "openspec/changes/rebuild-e2ee-relay-core/specs/sms-capture-and-queue/spec.md": {
-    "mtime": 1795260183.5948234,
-    "seen": 1795260333.4150445,
+  "openspec/changes/archive/2026-11-21-rebuild-e2ee-relay-core/specs/sms-capture-and-queue/spec.md": {
+    "mtime": 1795260921.1346848,
+    "seen": 1795263036.0190501,
     "ast_hash": "358e25428ba3cd9b837e84b990155703",
     "semantic_hash": ""
   },
-  "openspec/changes/rebuild-e2ee-relay-core/specs/transport-and-relay/spec.md": {
-    "mtime": 1795260272.7658234,
-    "seen": 1795260333.4150453,
+  "openspec/changes/archive/2026-11-21-rebuild-e2ee-relay-core/specs/transport-and-relay/spec.md": {
+    "mtime": 1795260921.1346848,
+    "seen": 1795263036.0190513,
     "ast_hash": "09d1da372521169089e7280df6a0ca53",
     "semantic_hash": ""
   },
-  "openspec/changes/rebuild-e2ee-relay-core/specs/ui-dashboards/spec.md": {
-    "mtime": 1795260190.8518233,
-    "seen": 1795260333.4150462,
+  "openspec/changes/archive/2026-11-21-rebuild-e2ee-relay-core/specs/ui-dashboards/spec.md": {
+    "mtime": 1795260921.1346848,
+    "seen": 1795263036.0190523,
     "ast_hash": "21bfafa2cadf36d1c5cc1e34fc217a8a",
     "semantic_hash": ""
   },
-  "openspec/changes/rebuild-e2ee-relay-core/specs/versioning-and-updater/spec.md": {
-    "mtime": 1795260191.3038232,
-    "seen": 1795260333.415047,
+  "openspec/changes/archive/2026-11-21-rebuild-e2ee-relay-core/specs/versioning-and-updater/spec.md": {
+    "mtime": 1795260921.1346848,
+    "seen": 1795263036.0190532,
     "ast_hash": "d8c108b9955b45d6f503afd237eca51f",
     "semantic_hash": ""
   },
-  "openspec/changes/rebuild-e2ee-relay-core/tasks.md": {
-    "mtime": 1795260251.7718234,
-    "seen": 1795260333.4150476,
-    "ast_hash": "7bd3bdb32fcfbe7c8749efd2148f0491",
+  "openspec/changes/archive/2026-11-21-rebuild-e2ee-relay-core/tasks.md": {
+    "mtime": 1795263028.4502592,
+    "seen": 1795263036.0190544,
+    "ast_hash": "3de09a40c42a44a8694889c901631a69",
     "semantic_hash": ""
   }
 }

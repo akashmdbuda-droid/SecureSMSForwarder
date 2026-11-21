@@ -3,15 +3,17 @@ schema: spec-driven
 context: |
   SecureSMSForwarder is a two-device Android (Kotlin + Jetpack Compose) SMS forwarding app
   with two roles (SENDER and VIEWER), End-to-End Encryption (Google Tink HPKE:
-  DHKEM_X25519_HKDF_SHA256_HKDF_SHA256_CHACHA20_POLY1305), Room local persistence,
-  and a dual-tier transport architecture:
-    - Tier 1: Direct WebRTC DataChannel (STUN + Metered.ca UDP/TCP/TLS TURN, Trickle ICE)
-    - Tier 2: E2EE Fallback Relay over Firebase Realtime Database with presence heartbeats
+  DHKEM_X25519_HKDF_SHA256_HKDF_SHA256_CHACHA20_POLY1305), Android Keystore Tink AEAD
+  at-rest Room storage encryption (LocalStorageCipher), singleton AppContainer lifecycle,
+  and a pure 100% E2EE Firebase Realtime Database Relay (HTTPS/WSS port 443) with
+  real-time peer presence heartbeats and visible error diagnostics.
 
   Key constraints:
   - Min SDK 26, Target/Compile SDK 36, Java 11 bytecode target, Gradle Kotlin DSL.
-  - Zero plaintext on wire or in Firebase Realtime Database: all SMS, ACK, and WIPE payloads
-    MUST be Tink HPKE-encrypted to the paired peer's public keyset before transmission.
+  - Zero plaintext on wire, in Firebase Realtime Database, or at rest in Room: all SMS, ACK,
+    and WIPE JSON payloads MUST be Tink HPKE-encrypted to the paired peer's public keyset
+    before transmission, and local Room payloads are encrypted via LocalStorageCipher (AEADv1:).
+  - Android cloud backup disabled (android:allowBackup="false").
   - Android 14+ foreground service uses remoteMessaging|dataSync types.
   - Versioning & releases are strictly governed by .agents/AGENTS.md and docs/VERSIONING.md:
     bump versionCode & versionName in app/build.gradle.kts, keep MainActivity.kt welcome toast

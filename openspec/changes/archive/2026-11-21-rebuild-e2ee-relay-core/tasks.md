@@ -54,7 +54,7 @@
 ## Lane E — Verification, OpenSpec Archive, Graphify Refresh & Release `v1.1.0` (Final Wave)
 **Owned files:** `openspec/specs/**`, `openspec/changes/archive/**`, `app/build.gradle.kts`, `ui/changelog/Changelog.kt`, `docs/PROJECT_CONTEXT.md`, `docs/VERSIONING.md`, `docs/HANDOFF.md`, `graphify-out/**`
 
-- [ ] E.1 Push implementation branch/commits and verify `.github/workflows/ci.yml` (`./gradlew testDebugUnitTest assembleDebug`) passes completely with zero errors.
-- [ ] E.2 Sync all delta specs into `openspec/specs/`, run `openspec validate --specs`, and archive `rebuild-e2ee-relay-core` (`openspec archive rebuild-e2ee-relay-core`).
-- [ ] E.3 Update `docs/PROJECT_CONTEXT.md` (remove resolved `BUG-01`–`BUG-12`, document pure E2EE Relay + `LocalStorageCipher` + `AppContainer`), `docs/VERSIONING.md`, `docs/HANDOFF.md`, and run `graphify update . --force`.
-- [ ] E.4 Once confirmed working, execute Release Process (`.agents/AGENTS.md`): bump `versionName = "1.1.0"` & `versionCode = 25` in `app/build.gradle.kts`, add `v1.1.0` entry to `Changelog.kt`, commit, tag `v1.1.0`, and push (`git push origin main && git push origin v1.1.0`).
+- [x] E.1 Push implementation branch/commits and verify `.github/workflows/ci.yml` (`./gradlew testDebugUnitTest assembleDebug`) passes completely with zero errors.
+- [x] E.2 Sync all delta specs into `openspec/specs/`, run `openspec validate --specs`, and archive `rebuild-e2ee-relay-core` (`openspec archive rebuild-e2ee-relay-core`).
+- [x] E.3 Update `docs/PROJECT_CONTEXT.md` (remove resolved `BUG-01`–`BUG-12`, document pure E2EE Relay + `LocalStorageCipher` + `AppContainer`), `docs/VERSIONING.md`, `docs/HANDOFF.md`, and run `graphify update . --force`.
+- [x] E.4 Once confirmed working, execute Release Process (`.agents/AGENTS.md`): bump `versionName = "1.1.0"` & `versionCode = 25` in `app/build.gradle.kts`, add `v1.1.0` entry to `Changelog.kt`, commit, tag `v1.1.0`, and push (`git push origin main && git push origin v1.1.0`).
